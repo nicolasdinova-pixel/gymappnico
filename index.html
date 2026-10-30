@@ -264,6 +264,7 @@
     <div class="grid" style="grid-template-columns:1fr">
       <input type="email" id="auth-email" placeholder="Correo">
       <input type="password" id="auth-pass" placeholder="Contraseña">
+      <input type="text" id="auth-nombre" placeholder="Nombre (solo para crear cuenta)">
     </div>
     <div class="row">
       <button class="btn" id="auth-entrar">Entrar</button>
@@ -273,6 +274,17 @@
       <button class="btn sec" id="auth-olvide">Olvidé mi contraseña</button>
     </div>
     <p class="mut" id="auth-msg"></p>
+  </div>
+</section>
+
+<!-- PENDIENTE DE APROBACIÓN -->
+<section id="pendiente" class="auth hidden">
+  <div class="card">
+    <h1>EN REVISIÓN</h1>
+    <p class="mut">Tu cuenta ya fue creada. Quien administra la app tiene que aprobarla antes de que puedas usarla.</p>
+    <div class="row">
+      <button class="btn cy" id="pend-reintentar">Ya me aprobaron, reintentar</button>
+    </div>
   </div>
 </section>
 
@@ -408,6 +420,10 @@
 
   <!-- DATOS -->
   <section id="vista-datos" class="hidden">
+    <div class="card hidden" id="admin-card">
+      <h2>Usuarios <small>solo administrador</small></h2>
+      <div id="admin-lista"></div>
+    </div>
     <div class="card">
       <h2>Copia de seguridad</h2>
       <p class="mut">Podés descargar todos tus datos en JSON cuando quieras.</p>
@@ -449,6 +465,8 @@ let cola = leerJSON(K_COLA, []);      // cambios pendientes de subir, en orden
 let ajustes = leerJSON(K_META, { meta: null });
 let sesionActualId = null;
 let modoRecuperacion = false;
+let cuenta = null;              // fila de la tabla cuentas: aprobado, es_admin, nombre
+let cargandoCuenta = false;
 let sincronizando = false;
 let ultimoError = "";
 const charts = {};
@@ -540,7 +558,7 @@ function encolar(op) {
 
 async function sincronizar() {
   pintarEstado();
-  if (!user || !navigator.onLine || sincronizando) return;
+  if (!user || !cuenta?.aprobado || !navigator.onLine || sincronizando) return;
   sincronizando = true;
   try {
     while (cola.length) {
@@ -591,8 +609,14 @@ $("auth-entrar").onclick = async () => {
   if (error) $("auth-msg").textContent = "No se pudo entrar: " + error.message;
 };
 $("auth-crear").onclick = async () => {
-  const { error } = await sb.auth.signUp({ email: $("auth-email").value.trim(), password: $("auth-pass").value });
-  $("auth-msg").textContent = error ? "No se pudo crear la cuenta: " + error.message : "Cuenta creada. Ya podés entrar.";
+  const { error } = await sb.auth.signUp({
+    email: $("auth-email").value.trim(),
+    password: $("auth-pass").value,
+    options: { data: { nombre: $("auth-nombre").value.trim() } }
+  });
+  $("auth-msg").textContent = error
+    ? "No se pudo crear la cuenta: " + error.message
+    : "Cuenta creada. Si pide confirmación, revisá tu correo. Después esperá que te aprueben.";
 };
 $("auth-olvide").onclick = async () => {
   const email = $("auth-email").value.trim();
@@ -624,22 +648,49 @@ $("salir").onclick = async () => {
 
 function mostrarVista() {
   const recup = modoRecuperacion;
-  const logueado = !!user && !recup;
+  const aprobado = !!cuenta?.aprobado;
+  const logueado = !!user && !recup && !cargandoCuenta && aprobado;
+  const pendiente = !!user && !recup && !cargandoCuenta && !aprobado;
   $("nueva").classList.toggle("hidden", !recup);
   $("auth").classList.toggle("hidden", recup || !!user);
+  $("pendiente").classList.toggle("hidden", !pendiente);
   $("app").classList.toggle("hidden", !logueado);
   $("tabs").classList.toggle("hidden", !logueado);
-  $("salir").classList.toggle("hidden", !logueado);
+  $("salir").classList.toggle("hidden", !user || recup);
+}
+
+async function cargarCuenta() {
+  const { data, error } = await sb.from("cuentas")
+    .select("id,correo,nombre,aprobado,es_admin").eq("id", user.id).maybeSingle();
+  cuenta = error ? null : data;
 }
 
 sb.auth.onAuthStateChange((event, session) => {
   // El enlace del correo de recuperación dispara este evento.
   if (event === "PASSWORD_RECOVERY") modoRecuperacion = true;
   user = session?.user ?? null;
+  cuenta = null;
+  cargandoCuenta = !!user;
   mostrarVista();
   // Diferido para no hacer consultas dentro del callback de autenticación.
-  setTimeout(() => { renderTodo(); sincronizar(); }, 0);
+  setTimeout(async () => {
+    if (user) await cargarCuenta();
+    cargandoCuenta = false;
+    mostrarVista();
+    renderTodo();
+    sincronizar();
+  }, 0);
 });
+
+$("pend-reintentar").onclick = async () => {
+  cargandoCuenta = true;
+  mostrarVista();
+  await cargarCuenta();
+  cargandoCuenta = false;
+  mostrarVista();
+  renderTodo();
+  sincronizar();
+};
 
 // ---------- Navegación ----------
 document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => {
@@ -650,6 +701,7 @@ document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => {
   window.scrollTo(0, 0);
   if (b.dataset.tab === "progreso") renderProgreso();
   if (b.dataset.tab === "peso") renderPeso();
+  if (b.dataset.tab === "datos") renderAdmin();
 });
 
 // ---------- Sesión ----------
@@ -1042,6 +1094,35 @@ function renderProgreso() {
 }
 $("p-ej").onchange = renderProgreso;
 $("p-metrica").onchange = renderProgreso;
+
+// ---------- Usuarios (solo administrador) ----------
+async function renderAdmin() {
+  const card = $("admin-card");
+  if (!cuenta?.es_admin) { card.classList.add("hidden"); return; }
+  card.classList.remove("hidden");
+  const { data, error } = await sb.from("cuentas")
+    .select("id,correo,nombre,aprobado,es_admin,creado").order("creado", { ascending: false });
+  if (error) { $("admin-lista").innerHTML = `<p class="mut">No se pudo cargar: ${esc(error.message)}</p>`; return; }
+  // Pendientes primero, para que se vean enseguida
+  const lista = data.slice().sort((a, b) => Number(a.aprobado) - Number(b.aprobado));
+  $("admin-lista").innerHTML = lista.length ? lista.map(c => `
+    <div class="row filas">
+      <div style="flex:1 1 60%">
+        <b style="color:${c.aprobado ? "var(--lime)" : "var(--sun)"}">${esc(c.nombre || "Sin nombre")}</b>
+        <div class="mut">${esc(c.correo || "")} · ${c.aprobado ? "aprobado" : "pendiente"}${c.es_admin ? " · admin" : ""}</div>
+      </div>
+      ${c.id === user.id ? "" : c.aprobado
+        ? `<button class="btn peligro mini fijo" onclick="cambiarAcceso('${c.id}', false)">Quitar acceso</button>`
+        : `<button class="btn cy mini fijo" onclick="cambiarAcceso('${c.id}', true)">Aprobar</button>`}
+    </div>`).join("") : '<p class="mut">Todavía no hay cuentas.</p>';
+}
+
+async function cambiarAcceso(id, aprobar) {
+  const { error } = await sb.from("cuentas").update({ aprobado: aprobar }).eq("id", id);
+  if (error) return alert("Error: " + error.message);
+  toast(aprobar ? "Usuario aprobado" : "Acceso quitado");
+  renderAdmin();
+}
 
 // ---------- Datos ----------
 $("d-exportar").onclick = () => {
