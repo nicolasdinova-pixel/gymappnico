@@ -2,266 +2,491 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0e14">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Gym">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
 <title>Gym App</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-  :root { --bg:#0f1115; --card:#1a1d24; --txt:#e8eaf0; --mut:#8a90a0; --acc:#4cc38a; --warn:#e5a13a; }
-  * { box-sizing:border-box; }
-  body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:var(--txt); }
-  header { padding:12px 16px; background:var(--card); position:sticky; top:0; z-index:5; display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:space-between; }
-  header h1 { font-size:18px; margin:0; }
-  nav button { background:none; border:1px solid #333; color:var(--txt); padding:6px 10px; border-radius:8px; margin-left:4px; cursor:pointer; }
-  nav button.on { background:var(--acc); color:#000; border-color:var(--acc); }
-  main { padding:16px; max-width:900px; margin:0 auto; }
-  .card { background:var(--card); border-radius:12px; padding:14px; margin-bottom:14px; }
-  h2 { font-size:16px; margin:0 0 10px; }
-  input, select { background:#0f1115; color:var(--txt); border:1px solid #333; border-radius:8px; padding:8px; font-size:15px; }
-  input[type=number] { width:90px; }
-  input[type=text], input[type=email], input[type=password] { width:100%; max-width:320px; }
-  button.btn { background:var(--acc); color:#000; border:0; border-radius:8px; padding:8px 12px; font-weight:600; cursor:pointer; }
-  button.ghost { background:none; border:1px solid #444; color:var(--txt); border-radius:8px; padding:6px 10px; cursor:pointer; margin:2px; }
-  button.danger { background:none; border:1px solid var(--warn); color:var(--warn); border-radius:8px; padding:6px 10px; cursor:pointer; }
-  table { width:100%; border-collapse:collapse; font-size:14px; }
-  td, th { padding:6px 4px; border-bottom:1px solid #2a2e38; text-align:left; }
-  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:8px; }
-  .mut { color:var(--mut); font-size:13px; }
-  .stat { display:inline-block; background:#0f1115; border-radius:10px; padding:10px 12px; margin:4px; min-width:120px; }
-  .stat b { display:block; font-size:20px; }
-  .pr { color:var(--acc); font-weight:600; }
-  canvas { max-height:260px; }
-  .hidden { display:none !important; }
+  :root {
+    --bg: #0b0e14; --card: #151a23; --card2: #1c2330; --line: #262e3d;
+    --txt: #f1f4f9; --mut: #8b94a7; --in: #0e131b;
+    --a1: #22d3a6; --a2: #7c5cff; --a3: #ffb020; --danger: #ff5d7a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; padding-bottom: 92px;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--txt);
+    background: radial-gradient(900px 500px at 0% -10%, rgba(124,92,255,.22), transparent 60%),
+                radial-gradient(800px 500px at 100% 0%, rgba(34,211,166,.16), transparent 60%),
+                var(--bg);
+    -webkit-font-smoothing: antialiased;
+  }
+  .hidden { display: none !important; }
+
+  /* Barra superior */
+  .top {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 18px; background: rgba(11,14,20,.75); backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--line);
+  }
+  .marca { font-weight: 800; font-size: 18px; letter-spacing: .3px; }
+  .marca i { font-style: normal; background: linear-gradient(90deg, var(--a1), var(--a2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+  /* Estado de conexión */
+  .estado {
+    position: sticky; top: 0; z-index: 11; padding: 8px 12px; text-align: center;
+    font-size: 13px; font-weight: 600; background: var(--a3); color: #1a1200;
+  }
+
+  main { padding: 16px; max-width: 980px; margin: 0 auto; }
+
+  /* Tarjetas */
+  .card {
+    background: linear-gradient(160deg, var(--card2), var(--card));
+    border: 1px solid var(--line); border-radius: 20px; padding: 18px; margin-bottom: 16px;
+    box-shadow: 0 12px 32px rgba(0,0,0,.28);
+  }
+  h2 { font-size: 17px; margin: 0 0 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  h2 small { color: var(--mut); font-weight: 500; font-size: 13px; }
+  .mut { color: var(--mut); font-size: 13px; }
+
+  /* Formularios */
+  input, select {
+    background: var(--in); color: var(--txt); border: 1px solid var(--line);
+    border-radius: 14px; padding: 13px 14px; font-size: 16px; outline: none; min-width: 0; width: 100%;
+  }
+  input:focus, select:focus { border-color: var(--a1); box-shadow: 0 0 0 3px rgba(34,211,166,.15); }
+  .grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); margin-bottom: 10px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+  .row > * { flex: 1 1 auto; }
+  .row > .fijo { flex: 0 0 auto; }
+
+  .btn {
+    background: linear-gradient(135deg, var(--a1), #14b38c); color: #04130e; border: 0;
+    border-radius: 14px; padding: 13px 18px; font-weight: 700; font-size: 15px; cursor: pointer;
+    box-shadow: 0 8px 20px rgba(34,211,166,.25); white-space: nowrap;
+  }
+  .btn:active { transform: scale(.98); }
+  .btn.sec { background: var(--card2); color: var(--txt); border: 1px solid var(--line); box-shadow: none; }
+  .btn.peligro { background: transparent; color: var(--danger); border: 1px solid rgba(255,93,122,.45); box-shadow: none; }
+  .btn.mini { padding: 7px 11px; font-size: 13px; border-radius: 10px; box-shadow: none; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .chip {
+    background: var(--card2); border: 1px solid var(--line); color: var(--txt);
+    border-radius: 999px; padding: 9px 14px; font-size: 14px; cursor: pointer;
+  }
+  .chip:active { background: rgba(34,211,166,.18); border-color: var(--a1); }
+
+  /* KPIs */
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 14px; }
+  .kpi {
+    border-radius: 18px; padding: 16px; border: 1px solid var(--line);
+    background: linear-gradient(135deg, rgba(34,211,166,.16), rgba(124,92,255,.12));
+  }
+  .kpi.alt { background: linear-gradient(135deg, rgba(255,176,32,.16), rgba(255,93,122,.10)); }
+  .kpi small { color: var(--mut); font-size: 11px; text-transform: uppercase; letter-spacing: .7px; font-weight: 700; }
+  .kpi b { display: block; font-size: 28px; margin-top: 6px; letter-spacing: -.5px; }
+  .kpi b span { font-size: 14px; color: var(--mut); font-weight: 600; margin-left: 4px; }
+  .pos { color: var(--a1); } .neg { color: var(--danger); }
+
+  .barra { height: 12px; background: var(--in); border-radius: 99px; overflow: hidden; margin: 6px 0 4px; }
+  .barra > div { height: 100%; background: linear-gradient(90deg, var(--a2), var(--a1)); border-radius: 99px; transition: width .7s ease; }
+
+  .chartbox { position: relative; height: 260px; margin: 6px 0; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { color: var(--mut); font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .6px; text-align: left; padding: 8px 4px; }
+  td { padding: 10px 4px; border-top: 1px solid var(--line); }
+
+  details.hist { border-top: 1px solid var(--line); padding: 12px 0; }
+  details.hist summary { cursor: pointer; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; list-style: none; }
+  details.hist summary::-webkit-details-marker { display: none; }
+  details.hist summary::before { content: "▸"; color: var(--a1); }
+  details.hist[open] summary::before { content: "▾"; }
+  details.hist summary b { font-size: 15px; }
+  details.hist .cuerpo { padding-top: 12px; }
+
+  /* Barra de navegación inferior */
+  .tabs {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 20;
+    display: flex; justify-content: space-around; gap: 4px;
+    padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+    background: rgba(15,19,27,.92); backdrop-filter: blur(14px); border-top: 1px solid var(--line);
+  }
+  .tabs button {
+    flex: 1; background: none; border: 0; color: var(--mut); font-size: 11px; font-weight: 600;
+    display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 7px 4px; border-radius: 14px; cursor: pointer;
+  }
+  .tabs button .ico { font-size: 20px; }
+  .tabs button.on { color: var(--a1); background: rgba(34,211,166,.10); }
+
+  /* Autenticación */
+  .auth { max-width: 420px; margin: 40px auto; }
+  .auth h1 { font-size: 26px; margin: 0 0 6px; }
+
+  @media (max-width: 600px) {
+    main { padding: 12px; }
+    .card { padding: 14px; border-radius: 18px; }
+    .kpi b { font-size: 24px; }
+    .chartbox { height: 220px; }
+  }
 </style>
 </head>
 <body>
 
-<header>
-  <h1>Gym App</h1>
-  <div>
-    <nav id="nav" class="hidden">
-      <button data-tab="sesion" class="on">Sesión</button>
-      <button data-tab="rutinas">Rutinas</button>
-      <button data-tab="progreso">Progreso</button>
-      <button data-tab="peso">Peso</button>
-      <button data-tab="datos">Datos</button>
-    </nav>
-  </div>
-  <button class="ghost hidden" id="salir">Salir</button>
+<div id="estado" class="estado hidden"></div>
+
+<header class="top">
+  <div class="marca"><i>◆</i> Gym</div>
+  <button id="salir" class="chip hidden">Salir</button>
 </header>
 
-<main>
-  <!-- LOGIN -->
-  <section id="auth" class="hidden">
+<!-- LOGIN -->
+<section id="auth" class="auth hidden">
+  <div class="card">
+    <h1>Entrar</h1>
+    <p class="mut">Tus datos se sincronizan con tu cuenta. Podés usar la app sin conexión.</p>
+    <div class="grid" style="grid-template-columns:1fr">
+      <input type="email" id="auth-email" placeholder="Correo">
+      <input type="password" id="auth-pass" placeholder="Contraseña">
+    </div>
+    <div class="row">
+      <button class="btn" id="auth-entrar">Entrar</button>
+      <button class="btn sec" id="auth-crear">Crear cuenta</button>
+    </div>
+    <p class="mut" id="auth-msg"></p>
+  </div>
+</section>
+
+<main id="app" class="hidden">
+
+  <!-- SESIÓN -->
+  <section id="vista-sesion">
     <div class="card">
-      <h2>Entrar</h2>
-      <div class="row"><input type="email" id="auth-email" placeholder="Correo"></div>
-      <div class="row"><input type="password" id="auth-pass" placeholder="Contraseña (mín. 6 caracteres)"></div>
-      <div class="row">
-        <button class="btn" id="auth-entrar">Entrar</button>
-        <button class="ghost" id="auth-crear">Crear cuenta</button>
+      <h2>Registrar entrenamiento</h2>
+      <div class="grid">
+        <input type="date" id="s-fecha">
+        <select id="s-rutina"></select>
       </div>
-      <p class="mut" id="auth-msg"></p>
+      <div class="chips" id="s-chips"></div>
+      <div class="grid">
+        <input type="text" id="s-ej" placeholder="Ejercicio" list="ej-list" style="grid-column: 1 / -1">
+        <datalist id="ej-list"></datalist>
+      </div>
+      <div class="grid">
+        <input type="number" id="s-series" placeholder="Series" min="1" value="3" inputmode="numeric">
+        <input type="number" id="s-reps" placeholder="Reps" min="1" value="10" inputmode="numeric">
+        <input type="text" id="s-peso" placeholder="Kg" inputmode="decimal">
+        <input type="text" id="s-rpe" placeholder="RPE 1-10" inputmode="decimal">
+      </div>
+      <div class="row">
+        <button class="btn" id="s-agregar">Agregar serie(s)</button>
+        <button class="btn sec" id="s-cerrar">Cerrar sesión</button>
+      </div>
+      <p class="mut">Cada serie se guarda en cuanto la agregás, aunque no tengas conexión.</p>
+    </div>
+
+    <div class="card">
+      <h2>Sesión actual <small id="s-info"></small></h2>
+      <table>
+        <thead><tr><th>Ejercicio</th><th>Series</th><th>Reps</th><th>Kg</th><th>RPE</th><th></th></tr></thead>
+        <tbody id="s-tabla"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Historial <small>últimas 10 sesiones</small></h2>
+      <div id="s-historial"></div>
     </div>
   </section>
 
-  <div id="app" class="hidden">
-    <!-- SESIÓN -->
-    <section id="tab-sesion">
-      <div class="card">
-        <h2>Registrar entrenamiento</h2>
-        <div class="row">
-          <input type="date" id="s-fecha">
-          <select id="s-rutina"></select>
-        </div>
-        <div class="row" id="s-chips"></div>
-        <div class="row">
-          <input type="text" id="s-ej" placeholder="Ejercicio (ej: Press banca)" list="ej-list">
-          <datalist id="ej-list"></datalist>
-        </div>
-        <div class="row">
-          <input type="number" id="s-series" placeholder="Series" min="1" value="3">
-          <input type="number" id="s-reps" placeholder="Reps" min="1" value="10">
-          <input type="number" id="s-peso" placeholder="Kg" min="0" step="0.5">
-          <input type="number" id="s-rpe" placeholder="RPE (1-10)" min="1" max="10" step="0.5">
-        </div>
-        <div class="row">
-          <button class="btn" id="s-agregar">Agregar serie(s)</button>
-          <button class="ghost" id="s-cerrar">Cerrar sesión</button>
-        </div>
-        <p class="mut">Cada serie se guarda al agregarla. Si el ejercicio ya está en la sesión, se suman las series nuevas.</p>
+  <!-- RUTINAS -->
+  <section id="vista-rutinas" class="hidden">
+    <div class="card">
+      <h2>Nueva rutina</h2>
+      <div class="grid" style="grid-template-columns:1fr">
+        <input type="text" id="r-nombre" placeholder="Nombre (ej: Día 1 - Empuje)">
+        <input type="text" id="r-ejs" placeholder="Ejercicios separados por coma">
       </div>
-      <div class="card">
-        <h2>Sesión actual <span class="mut" id="s-info"></span></h2>
-        <table><thead><tr><th>Ejercicio</th><th>Series</th><th>Reps</th><th>Kg</th><th>RPE</th><th></th></tr></thead>
-        <tbody id="s-tabla"></tbody></table>
-      </div>
-      <div class="card">
-        <h2>Últimas sesiones</h2>
-        <div id="s-historial"></div>
-      </div>
-    </section>
+      <button class="btn" id="r-guardar">Guardar rutina</button>
+    </div>
+    <div class="card">
+      <h2>Rutinas guardadas</h2>
+      <div id="r-lista"></div>
+    </div>
+  </section>
 
-    <!-- RUTINAS -->
-    <section id="tab-rutinas" class="hidden">
-      <div class="card">
-        <h2>Nueva rutina</h2>
-        <div class="row"><input type="text" id="r-nombre" placeholder="Nombre (ej: Día A - Empuje)"></div>
-        <div class="row"><input type="text" id="r-ejs" placeholder="Ejercicios separados por coma"></div>
-        <div class="row"><button class="btn" id="r-guardar">Guardar rutina</button></div>
-      </div>
-      <div class="card"><h2>Rutinas guardadas</h2><div id="r-lista"></div></div>
-    </section>
+  <!-- PROGRESO -->
+  <section id="vista-progreso" class="hidden">
+    <div class="card">
+      <h2>Tu peso <small id="pr-rango"></small></h2>
+      <div class="kpis" id="pr-kpis"></div>
+      <div id="pr-meta"></div>
+      <div class="chartbox"><canvas id="pr-peso-chart"></canvas></div>
+      <p class="mut" id="pr-vacio"></p>
+    </div>
 
-    <!-- PROGRESO -->
-    <section id="tab-progreso" class="hidden">
-      <div class="card">
-        <h2>Progreso por ejercicio</h2>
-        <div class="row">
-          <select id="p-ej"></select>
-          <select id="p-metrica">
-            <option value="max">Peso máximo</option>
-            <option value="e1rm">1RM estimado (Epley)</option>
-            <option value="vol">Volumen por sesión</option>
-          </select>
-        </div>
-        <canvas id="p-chart"></canvas>
-        <div id="p-stats"></div>
-      </div>
-      <div class="card">
-        <h2>Resumen semanal</h2>
-        <div id="p-semana"></div>
-      </div>
-    </section>
+    <div class="card">
+      <h2>Entrenamiento</h2>
+      <div class="kpis" id="en-kpis"></div>
+      <div class="chartbox"><canvas id="en-semanas-chart"></canvas></div>
+    </div>
 
-    <!-- PESO -->
-    <section id="tab-peso" class="hidden">
-      <div class="card">
-        <h2>Peso corporal</h2>
-        <div class="row">
-          <input type="date" id="pc-fecha">
-          <input type="number" id="pc-kg" placeholder="Kg" step="0.1" min="20">
-          <button class="btn" id="pc-guardar">Guardar</button>
-        </div>
-        <canvas id="pc-chart"></canvas>
-        <p class="mut" id="pc-info"></p>
-        <div id="pc-lista"></div>
+    <div class="card">
+      <h2>Progreso por ejercicio</h2>
+      <div class="grid">
+        <select id="p-ej"></select>
+        <select id="p-metrica">
+          <option value="max">Peso máximo</option>
+          <option value="e1rm">1RM estimado (Epley)</option>
+          <option value="vol">Volumen por sesión</option>
+        </select>
       </div>
-    </section>
+      <div class="chartbox"><canvas id="p-chart"></canvas></div>
+      <div class="kpis" id="p-stats"></div>
+    </div>
+  </section>
 
-    <!-- DATOS -->
-    <section id="tab-datos" class="hidden">
-      <div class="card">
-        <h2>Copia de seguridad</h2>
-        <p class="mut">Tus datos están en Supabase. Podés descargar una copia en JSON cuando quieras.</p>
-        <div class="row"><button class="btn" id="d-exportar">Exportar JSON</button></div>
+  <!-- PESO -->
+  <section id="vista-peso" class="hidden">
+    <div class="card">
+      <h2>Registrar peso</h2>
+      <div class="grid">
+        <input type="date" id="pc-fecha">
+        <input type="text" id="pc-kg" placeholder="Kg" inputmode="decimal">
       </div>
-    </section>
-  </div>
+      <button class="btn" id="pc-guardar">Guardar peso</button>
+    </div>
+
+    <div class="card">
+      <h2>Meta <small>se guarda solo en este celular</small></h2>
+      <div class="row">
+        <input type="text" id="meta-kg" placeholder="Peso objetivo (kg)" inputmode="decimal">
+        <button class="btn sec fijo" id="meta-guardar">Guardar meta</button>
+        <button class="btn peligro fijo" id="meta-borrar">Quitar</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Últimos registros</h2>
+      <div id="pc-lista"></div>
+    </div>
+  </section>
+
+  <!-- DATOS -->
+  <section id="vista-datos" class="hidden">
+    <div class="card">
+      <h2>Copia de seguridad</h2>
+      <p class="mut">Podés descargar todos tus datos en JSON cuando quieras.</p>
+      <button class="btn" id="d-exportar">Exportar JSON</button>
+    </div>
+    <div class="card">
+      <h2>Zona peligrosa</h2>
+      <p class="mut">Borra todas tus rutinas, sesiones y registros de peso de la nube. Requiere conexión.</p>
+      <button class="btn peligro" id="d-borrar">Borrar todos mis datos</button>
+    </div>
+  </section>
 </main>
 
+<nav class="tabs hidden" id="tabs">
+  <button data-tab="sesion" class="on"><span class="ico">🏋️</span>Sesión</button>
+  <button data-tab="rutinas"><span class="ico">📋</span>Rutinas</button>
+  <button data-tab="progreso"><span class="ico">📈</span>Progreso</button>
+  <button data-tab="peso"><span class="ico">⚖️</span>Peso</button>
+  <button data-tab="datos"><span class="ico">⚙️</span>Datos</button>
+</nav>
+
 <script>
-// ---- Configuración de Supabase (clave pública: segura con RLS activo) ----
+// ---------- Configuración ----------
 const SUPABASE_URL = "https://wgyjzybkugqmggrybqia.supabase.co";
 const SUPABASE_KEY = "sb_publishable_T59BVTQY4QQ99-ZIUIJg5A_cxt1skFI";
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// ---- Estado ----
-let user = null;
-let db = { rutinas: [], sesiones: [], peso: [] };
-let sesionActualId = null;
-let rutinaElegida = null;
+const K_CACHE = "gymapp_cache", K_COLA = "gymapp_cola", K_META = "gymapp_meta";
+// Para peso la clave de conflicto es (usuario, fecha); para el resto, el id.
+const ONCONFLICT = { peso: "user_id,fecha" };
 
+// ---------- Estado ----------
+let user = null;
+let db = leerJSON(K_CACHE, { rutinas: [], sesiones: [], peso: [] });
+let cola = leerJSON(K_COLA, []);      // cambios pendientes de subir, en orden
+let ajustes = leerJSON(K_META, { meta: null });
+let sesionActualId = null;
+let sincronizando = false;
+let ultimoError = "";
+const charts = {};
+
+// ---------- Utilidades ----------
 const $ = id => document.getElementById(id);
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+const num = v => parseFloat(String(v).replace(",", "."));
+const fmt = (n, d = 1) => (n === null || isNaN(n)) ? "—" : Number(n).toFixed(d);
 function hoy() {
   const d = new Date();
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 }
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function e1rm(kg, reps) { return reps === 1 ? kg : kg * (1 + reps / 30); }
+function leerJSON(k, def) { try { return JSON.parse(localStorage.getItem(k)) ?? def; } catch (e) { return def; } }
+function guardarTodo() {
+  localStorage.setItem(K_CACHE, JSON.stringify(db));
+  localStorage.setItem(K_COLA, JSON.stringify(cola));
+  localStorage.setItem(K_META, JSON.stringify(ajustes));
+}
 const sesionActual = () => db.sesiones.find(s => s.id === sesionActualId) || null;
 
-async function run(q) {
-  const { data, error } = await q;
-  if (error) { alert("Error: " + error.message); throw error; }
-  return data;
+Chart.defaults.color = "#8b94a7";
+Chart.defaults.borderColor = "#262e3d";
+Chart.defaults.font.family = "system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
+
+function dibujar(id, config) {
+  if (charts[id]) charts[id].destroy();
+  config.options = Object.assign({ responsive: true, maintainAspectRatio: false, interaction: { mode: "index", intersect: false } }, config.options || {});
+  charts[id] = new Chart($(id), config);
 }
 
-// ---- Login ----
+// ---------- Sincronización ----------
+function pintarEstado() {
+  const el = $("estado");
+  if (!user) return el.classList.add("hidden");
+  const sinRed = !navigator.onLine;
+  if (!sinRed && !cola.length && !ultimoError) return el.classList.add("hidden");
+  el.classList.remove("hidden");
+  if (sinRed) el.textContent = `Sin conexión · ${cola.length} cambio(s) guardados en este celular`;
+  else if (cola.length) el.textContent = `Subiendo ${cola.length} cambio(s)…`;
+  else el.textContent = ultimoError;
+}
+
+function ejecutar(op) {
+  const t = sb.from(op.tabla);
+  switch (op.t) {
+    case "ins": return t.upsert(op.fila, { onConflict: ONCONFLICT[op.tabla] || "id" });
+    case "upd": return t.update(op.cambios).eq("id", op.id);
+    case "del": return t.delete().eq("id", op.id);
+    case "delFecha": return t.delete().eq("fecha", op.fecha);
+  }
+}
+
+function encolar(op) {
+  cola.push(op);
+  guardarTodo();
+  renderTodo();
+  sincronizar();
+}
+
+async function sincronizar() {
+  pintarEstado();
+  if (!user || !navigator.onLine || sincronizando) return;
+  sincronizando = true;
+  try {
+    while (cola.length) {
+      const { error } = await ejecutar(cola[0]);
+      if (error) {
+        // Sin "code" suele ser un corte de red: se conserva el cambio y se reintenta después.
+        if (!error.code) break;
+        // Un error del servidor (por ejemplo, un valor no permitido) no debe trabar la cola.
+        ultimoError = "Un cambio fue rechazado: " + error.message;
+      } else {
+        ultimoError = "";
+      }
+      cola.shift();
+      guardarTodo();
+      pintarEstado();
+    }
+    if (!cola.length) await descargar();
+  } catch (e) {
+    // Sin red: no pasa nada, se reintenta en el próximo intento.
+  } finally {
+    sincronizando = false;
+    pintarEstado();
+  }
+}
+
+async function descargar() {
+  const [r, s, p] = await Promise.all([
+    sb.from("rutinas").select("id,nombre,ejercicios,created_at").order("created_at"),
+    sb.from("sesiones").select("id,fecha,series(id,ejercicio,reps,kg,rpe,created_at)").order("fecha"),
+    sb.from("peso").select("fecha,kg").order("fecha")
+  ]);
+  for (const res of [r, s, p]) if (res.error) throw res.error;
+  // Si mientras bajaba hubo cambios locales nuevos, no se pisan: se suben primero.
+  if (cola.length) return;
+  s.data.forEach(ses => ses.series.sort((a, b) => a.created_at.localeCompare(b.created_at)));
+  db = { rutinas: r.data, sesiones: s.data, peso: p.data };
+  guardarTodo();
+  renderTodo();
+}
+
+window.addEventListener("online", sincronizar);
+window.addEventListener("offline", pintarEstado);
+setInterval(sincronizar, 30000);
+
+// ---------- Login ----------
 $("auth-entrar").onclick = async () => {
   const { error } = await sb.auth.signInWithPassword({ email: $("auth-email").value.trim(), password: $("auth-pass").value });
   if (error) $("auth-msg").textContent = "No se pudo entrar: " + error.message;
 };
 $("auth-crear").onclick = async () => {
   const { error } = await sb.auth.signUp({ email: $("auth-email").value.trim(), password: $("auth-pass").value });
-  $("auth-msg").textContent = error
-    ? "No se pudo crear la cuenta: " + error.message
-    : "Cuenta creada. Si Supabase pide confirmación, revisá tu correo.";
+  $("auth-msg").textContent = error ? "No se pudo crear la cuenta: " + error.message : "Cuenta creada. Ya podés entrar.";
 };
-$("salir").onclick = () => sb.auth.signOut();
+$("salir").onclick = async () => {
+  if (cola.length && !confirm(`Hay ${cola.length} cambio(s) sin subir. Si salís, se pierden. ¿Continuar?`)) return;
+  cola = []; db = { rutinas: [], sesiones: [], peso: [] }; sesionActualId = null;
+  guardarTodo();
+  await sb.auth.signOut();
+};
 
 sb.auth.onAuthStateChange((_event, session) => {
   user = session?.user ?? null;
   $("auth").classList.toggle("hidden", !!user);
   $("app").classList.toggle("hidden", !user);
-  $("nav").classList.toggle("hidden", !user);
+  $("tabs").classList.toggle("hidden", !user);
   $("salir").classList.toggle("hidden", !user);
-  // Se difiere para no hacer consultas dentro del callback de auth
-  setTimeout(async () => {
-    if (!user) return;
-    sesionActualId = null;
-    try { await cargarTodo(); renderTodo(); } catch (e) { console.error(e); }
-  }, 0);
+  // Diferido para no hacer consultas dentro del callback de autenticación.
+  setTimeout(() => { renderTodo(); sincronizar(); }, 0);
 });
 
-// ---- Carga de datos ----
-async function cargarTodo() {
-  const [r, s, p] = await Promise.all([
-    sb.from("rutinas").select("id,nombre,ejercicios,created_at").order("created_at"),
-    sb.from("sesiones").select("id,fecha,series(id,ejercicio,reps,kg,rpe,created_at)").order("fecha"),
-    sb.from("peso").select("id,fecha,kg").order("fecha")
-  ]);
-  for (const res of [r, s, p]) if (res.error) throw res.error;
-  s.data.forEach(ses => ses.series.sort((a, b) => a.created_at.localeCompare(b.created_at)));
-  db = { rutinas: r.data, sesiones: s.data, peso: p.data };
-}
-
-function renderTodo() {
-  refrescarSelects();
-  renderSesion();
-  renderRutinas();
-  renderProgreso();
-  renderPeso();
-}
-
-// ---- Navegación ----
-document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
-  document.querySelectorAll("nav button").forEach(x => x.classList.remove("on"));
+// ---------- Navegación ----------
+document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("#tabs button").forEach(x => x.classList.remove("on"));
   b.classList.add("on");
-  document.querySelectorAll("#app section").forEach(s => s.classList.add("hidden"));
-  $("tab-" + b.dataset.tab).classList.remove("hidden");
+  document.querySelectorAll("#app > section").forEach(s => s.classList.add("hidden"));
+  $("vista-" + b.dataset.tab).classList.remove("hidden");
+  window.scrollTo(0, 0);
+  if (b.dataset.tab === "progreso") renderProgreso();
+  if (b.dataset.tab === "peso") renderPeso();
 });
 
-// ---- Sesión ----
+// ---------- Sesión ----------
 function ejerciciosConocidos() {
   const set = new Set();
   db.sesiones.forEach(s => s.series.forEach(x => set.add(x.ejercicio)));
   db.rutinas.forEach(r => r.ejercicios.forEach(e => set.add(e)));
   return [...set].sort();
 }
+
 function refrescarSelects() {
   const sel = $("s-rutina");
   const previa = sel.value;
-  sel.innerHTML = '<option value="">— rutina —</option>' + db.rutinas.map(r => `<option value="${r.id}">${esc(r.nombre)}</option>`).join("");
+  sel.innerHTML = '<option value="">Elegí una rutina</option>' + db.rutinas.map(r => `<option value="${r.id}">${esc(r.nombre)}</option>`).join("");
   sel.value = previa;
   $("ej-list").innerHTML = ejerciciosConocidos().map(e => `<option value="${esc(e)}">`).join("");
   if (!$("s-fecha").value) $("s-fecha").value = hoy();
   if (!$("pc-fecha").value) $("pc-fecha").value = hoy();
 }
+
 $("s-rutina").onchange = () => {
-  rutinaElegida = db.rutinas.find(r => r.id === $("s-rutina").value) || null;
-  $("s-chips").innerHTML = rutinaElegida
-    ? rutinaElegida.ejercicios.map(e => `<button class="ghost" data-ej="${esc(e)}">${esc(e)}</button>`).join("")
+  const r = db.rutinas.find(x => x.id === $("s-rutina").value);
+  $("s-chips").innerHTML = r
+    ? r.ejercicios.map(e => `<button class="chip" data-ej="${esc(e)}">${esc(e)}</button>`).join("")
     : "";
 };
 $("s-chips").onclick = e => {
@@ -269,100 +494,301 @@ $("s-chips").onclick = e => {
   if (b) $("s-ej").value = b.dataset.ej;
 };
 
-async function asegurarSesion() {
-  if (sesionActual()) return sesionActual();
-  const data = await run(sb.from("sesiones")
-    .insert({ user_id: user.id, fecha: $("s-fecha").value || hoy() })
-    .select("id").single());
-  sesionActualId = data.id;
-  await cargarTodo();
-  return sesionActual();
+function asegurarSesion() {
+  let ses = sesionActual();
+  if (ses) return ses;
+  ses = { id: uid(), fecha: $("s-fecha").value || hoy(), series: [] };
+  db.sesiones.push(ses);
+  sesionActualId = ses.id;
+  encolar({ t: "ins", tabla: "sesiones", fila: { id: ses.id, user_id: user.id, fecha: ses.fecha } });
+  return ses;
 }
 
-$("s-agregar").onclick = async () => {
+$("s-agregar").onclick = () => {
   const ej = $("s-ej").value.trim();
   const n = parseInt($("s-series").value) || 1;
   const reps = parseInt($("s-reps").value);
-  const kg = parseFloat($("s-peso").value) || 0;
-  const rpe = parseFloat($("s-rpe").value) || null;
+  const kg = num($("s-peso").value) || 0;
+  const rpe = num($("s-rpe").value) || null;
   if (!ej || !reps) return alert("Completá ejercicio y repeticiones.");
-  const ses = await asegurarSesion();
-  const filas = Array.from({ length: n }, () => ({ user_id: user.id, sesion_id: ses.id, ejercicio: ej, reps, kg, rpe }));
-  await run(sb.from("series").insert(filas));
-  await cargarTodo();
-  renderTodo();
-};
-
-$("s-cerrar").onclick = async () => {
-  const ses = sesionActual();
-  if (ses && ses.series.length === 0) await run(sb.from("sesiones").delete().eq("id", ses.id));
-  sesionActualId = null;
-  await cargarTodo();
-  renderTodo();
-};
-
-async function borrarSerie(id) {
-  await run(sb.from("series").delete().eq("id", id));
-  await cargarTodo();
-  const cur = sesionActual();
-  if (cur && cur.series.length === 0) {
-    await run(sb.from("sesiones").delete().eq("id", cur.id));
-    sesionActualId = null;
-    await cargarTodo();
+  const ses = asegurarSesion();
+  const filas = [];
+  for (let i = 0; i < n; i++) {
+    filas.push({ id: uid(), user_id: user.id, sesion_id: ses.id, ejercicio: ej, reps, kg, rpe, created_at: new Date().toISOString() });
   }
+  ses.series.push(...filas);
+  encolar({ t: "ins", tabla: "series", fila: filas.map(({ created_at, ...f }) => f) });
+  $("s-ej").value = "";
+};
+
+function quitarSesion(id) {
+  db.sesiones = db.sesiones.filter(s => s.id !== id);
+  if (sesionActualId === id) sesionActualId = null;
+  encolar({ t: "del", tabla: "sesiones", id });
+}
+
+$("s-cerrar").onclick = () => {
+  const ses = sesionActual();
+  if (ses && !ses.series.length) quitarSesion(ses.id);
+  sesionActualId = null;
+  guardarTodo();
   renderTodo();
+};
+
+function borrarSerie(sesId, serieId) {
+  const ses = db.sesiones.find(s => s.id === sesId);
+  if (!ses) return;
+  ses.series = ses.series.filter(x => x.id !== serieId);
+  encolar({ t: "del", tabla: "series", id: serieId });
+  if (!ses.series.length) quitarSesion(sesId);
+}
+
+function editarSerie(sesId, serieId) {
+  const ses = db.sesiones.find(s => s.id === sesId);
+  const s = ses?.series.find(x => x.id === serieId);
+  if (!s) return;
+  const kgNuevo = prompt("Kilos", s.kg);
+  if (kgNuevo === null) return;
+  const repsNuevas = prompt("Repeticiones", s.reps);
+  if (repsNuevas === null) return;
+  s.kg = num(kgNuevo) || 0;
+  s.reps = parseInt(repsNuevas) || s.reps;
+  encolar({ t: "upd", tabla: "series", id: serieId, cambios: { kg: s.kg, reps: s.reps } });
+}
+
+function cambiarFecha(sesId, fecha) {
+  const ses = db.sesiones.find(s => s.id === sesId);
+  if (!ses || !fecha) return;
+  ses.fecha = fecha;
+  db.sesiones.sort((a, b) => a.fecha.localeCompare(b.fecha));
+  encolar({ t: "upd", tabla: "sesiones", id: sesId, cambios: { fecha } });
+}
+
+function borrarSesionConfirm(id) {
+  if (confirm("¿Borrar esta sesión y todas sus series?")) quitarSesion(id);
 }
 
 function renderSesion() {
   const ses = sesionActual();
-  $("s-info").textContent = ses ? ses.fecha : "(sin sesión abierta)";
+  $("s-info").textContent = ses ? ses.fecha : "sin sesión abierta";
   if (!ses) {
-    $("s-tabla").innerHTML = "";
+    $("s-tabla").innerHTML = `<tr><td colspan="6" class="mut">Agregá una serie para empezar.</td></tr>`;
   } else {
     const grupos = {};
     ses.series.forEach(x => (grupos[x.ejercicio] = grupos[x.ejercicio] || []).push(x));
-    $("s-tabla").innerHTML = Object.entries(grupos).map(([ej, arr]) => {
-      const reps = arr.map(x => x.reps).join(", ");
-      const kg = [...new Set(arr.map(x => x.kg))].join(", ");
-      const rpe = arr.map(x => x.rpe ?? "-").join(", ");
-      return `<tr><td>${esc(ej)}</td><td>${arr.length}</td><td>${reps}</td><td>${kg}</td><td>${rpe}</td>
-        <td><button class="ghost" onclick="borrarSerie('${arr[arr.length - 1].id}')">−1</button></td></tr>`;
-    }).join("");
+    $("s-tabla").innerHTML = Object.entries(grupos).map(([ej, arr]) => `
+      <tr>
+        <td><b>${esc(ej)}</b></td><td>${arr.length}</td>
+        <td>${arr.map(x => x.reps).join(", ")}</td>
+        <td>${[...new Set(arr.map(x => x.kg))].join(", ")}</td>
+        <td>${arr.map(x => x.rpe ?? "-").join(", ")}</td>
+        <td><button class="btn sec mini" onclick="borrarSerie('${ses.id}','${arr[arr.length - 1].id}')">−1</button></td>
+      </tr>`).join("") || `<tr><td colspan="6" class="mut">Sin series todavía.</td></tr>`;
   }
-  const hist = db.sesiones.filter(s => s.id !== sesionActualId && s.series.length > 0).slice(-5).reverse();
+
+  const hist = db.sesiones.filter(s => s.id !== sesionActualId && s.series.length).slice(-10).reverse();
   $("s-historial").innerHTML = hist.length ? hist.map(s => {
     const ejs = [...new Set(s.series.map(x => x.ejercicio))].join(", ");
     const vol = s.series.reduce((a, x) => a + x.reps * x.kg, 0);
-    return `<div class="row"><b>${s.fecha}</b><span class="mut">${esc(ejs)} · ${s.series.length} series · vol ${Math.round(vol)} kg</span></div>`;
-  }).join("") : '<p class="mut">Todavía no hay sesiones.</p>';
+    return `
+      <details class="hist">
+        <summary><b>${s.fecha}</b><span class="mut">${esc(ejs)} · ${s.series.length} series · ${Math.round(vol)} kg</span></summary>
+        <div class="cuerpo">
+          <div class="row">
+            <input type="date" value="${s.fecha}" style="max-width:180px" onchange="cambiarFecha('${s.id}', this.value)">
+            <button class="btn peligro mini fijo" onclick="borrarSesionConfirm('${s.id}')">Borrar sesión</button>
+          </div>
+          <table>
+            <thead><tr><th>Ejercicio</th><th>Reps</th><th>Kg</th><th>RPE</th><th></th></tr></thead>
+            <tbody>${s.series.map(x => `
+              <tr>
+                <td>${esc(x.ejercicio)}</td><td>${x.reps}</td><td>${x.kg}</td><td>${x.rpe ?? "-"}</td>
+                <td style="white-space:nowrap">
+                  <button class="btn sec mini" onclick="editarSerie('${s.id}','${x.id}')">Editar</button>
+                  <button class="btn peligro mini" onclick="borrarSerie('${s.id}','${x.id}')">×</button>
+                </td>
+              </tr>`).join("")}
+            </tbody>
+          </table>
+        </div>
+      </details>`;
+  }).join("") : '<p class="mut">Todavía no hay sesiones cerradas.</p>';
 }
 
-// ---- Rutinas ----
-$("r-guardar").onclick = async () => {
+// ---------- Rutinas ----------
+$("r-guardar").onclick = () => {
   const nombre = $("r-nombre").value.trim();
   const ejercicios = $("r-ejs").value.split(",").map(s => s.trim()).filter(Boolean);
   if (!nombre || !ejercicios.length) return alert("Poné nombre y al menos un ejercicio.");
-  await run(sb.from("rutinas").insert({ user_id: user.id, nombre, ejercicios }));
+  const r = { id: uid(), nombre, ejercicios };
+  db.rutinas.push(r);
+  encolar({ t: "ins", tabla: "rutinas", fila: { id: r.id, user_id: user.id, nombre, ejercicios } });
   $("r-nombre").value = ""; $("r-ejs").value = "";
-  await cargarTodo();
-  renderTodo();
 };
-async function borrarRutina(id) {
+
+function borrarRutina(id) {
   if (!confirm("¿Borrar esta rutina? Las sesiones registradas no se borran.")) return;
-  await run(sb.from("rutinas").delete().eq("id", id));
-  await cargarTodo();
-  renderTodo();
-}
-function renderRutinas() {
-  $("r-lista").innerHTML = db.rutinas.length ? db.rutinas.map(r =>
-    `<div class="row"><b>${esc(r.nombre)}</b><span class="mut">${esc(r.ejercicios.join(" · "))}</span>
-     <button class="danger" onclick="borrarRutina('${r.id}')">Borrar</button></div>`).join("")
-    : '<p class="mut">Creá tu primera rutina.</p>';
+  db.rutinas = db.rutinas.filter(r => r.id !== id);
+  encolar({ t: "del", tabla: "rutinas", id });
 }
 
-// ---- Progreso ----
-let chartProg = null;
-function renderProgreso() {
+function renderRutinas() {
+  $("r-lista").innerHTML = db.rutinas.length ? db.rutinas.map(r => `
+    <div class="row" style="border-top:1px solid var(--line);padding-top:10px">
+      <div><b>${esc(r.nombre)}</b><div class="mut">${esc(r.ejercicios.join(" · "))}</div></div>
+      <button class="btn peligro mini fijo" onclick="borrarRutina('${r.id}')">Borrar</button>
+    </div>`).join("") : '<p class="mut">Creá tu primera rutina.</p>';
+}
+
+// ---------- Peso ----------
+$("pc-guardar").onclick = () => {
+  const fecha = $("pc-fecha").value || hoy();
+  const kg = num($("pc-kg").value);
+  if (!kg) return alert("Ingresá el peso.");
+  db.peso = db.peso.filter(p => p.fecha !== fecha);
+  db.peso.push({ fecha, kg });
+  db.peso.sort((a, b) => a.fecha.localeCompare(b.fecha));
+  encolar({ t: "ins", tabla: "peso", fila: { user_id: user.id, fecha, kg } });
+  $("pc-kg").value = "";
+};
+
+function borrarPeso(fecha) {
+  if (!confirm("¿Borrar este registro de peso?")) return;
+  db.peso = db.peso.filter(p => p.fecha !== fecha);
+  encolar({ t: "delFecha", tabla: "peso", fecha });
+}
+
+$("meta-guardar").onclick = () => {
+  const m = num($("meta-kg").value);
+  if (!m) return alert("Ingresá un peso objetivo válido.");
+  ajustes.meta = m;
+  guardarTodo();
+  renderTodo();
+};
+$("meta-borrar").onclick = () => {
+  ajustes.meta = null;
+  $("meta-kg").value = "";
+  guardarTodo();
+  renderTodo();
+};
+
+function renderPeso() {
+  if (ajustes.meta && !$("meta-kg").value) $("meta-kg").value = ajustes.meta;
+  $("pc-lista").innerHTML = db.peso.length ? db.peso.slice().reverse().slice(0, 14).map(p => `
+    <div class="row" style="border-top:1px solid var(--line);padding-top:10px">
+      <b>${p.fecha}</b><span style="font-size:18px">${p.kg} kg</span>
+      <button class="btn peligro mini fijo" onclick="borrarPeso('${p.fecha}')">Borrar</button>
+    </div>`).join("") : '<p class="mut">Todavía no cargaste ningún peso.</p>';
+}
+
+// ---------- Progreso ----------
+function ritmoSemanal(datos) {
+  // Pendiente de regresión lineal de los últimos 42 días, expresada en kg por semana.
+  const corte = Date.now() / 864e5 - 42;
+  const pts = datos
+    .map(p => [new Date(p.fecha).getTime() / 864e5, p.kg])
+    .filter(([x]) => x >= corte);
+  if (pts.length < 3) return null;
+  const mx = pts.reduce((a, p) => a + p[0], 0) / pts.length;
+  const my = pts.reduce((a, p) => a + p[1], 0) / pts.length;
+  let num_ = 0, den = 0;
+  pts.forEach(([x, y]) => { num_ += (x - mx) * (y - my); den += (x - mx) ** 2; });
+  return den ? (num_ / den) * 7 : null;
+}
+
+function volumenSemanas(n) {
+  const hoyMs = new Date(hoy()).getTime();
+  const out = [];
+  for (let w = n - 1; w >= 0; w--) {
+    const hasta = hoyMs - w * 7 * 864e5;
+    const desde = hasta - 7 * 864e5;
+    let vol = 0;
+    db.sesiones.forEach(s => {
+      const t = new Date(s.fecha).getTime();
+      if (t > desde && t <= hasta) s.series.forEach(x => vol += x.kg * x.reps);
+    });
+    out.push({ label: new Date(hasta).toISOString().slice(5, 10), vol: Math.round(vol) });
+  }
+  return out;
+}
+
+function renderProgresoPeso() {
+  const datos = db.peso;
+  const ini = datos[0], ult = datos[datos.length - 1];
+  const m = ajustes.meta;
+
+  if (!datos.length) {
+    $("pr-kpis").innerHTML = "";
+    $("pr-meta").innerHTML = "";
+    $("pr-rango").textContent = "";
+    $("pr-vacio").textContent = "Cargá tu peso en la pestaña Peso para ver tu progreso acá.";
+    if (charts["pr-peso-chart"]) { charts["pr-peso-chart"].destroy(); delete charts["pr-peso-chart"]; }
+    return;
+  }
+
+  const cambio = ult.kg - ini.kg;
+  const ritmo = ritmoSemanal(datos);
+  const restante = m ? ult.kg - m : null;
+  $("pr-rango").textContent = datos.length > 1 ? `${ini.fecha} → ${ult.fecha}` : ult.fecha;
+  $("pr-vacio").textContent = datos.length < 2 ? "Con un solo registro todavía no hay tendencia. Cargá otro peso más adelante." : "";
+
+  $("pr-kpis").innerHTML = `
+    <div class="kpi"><small>Peso actual</small><b>${fmt(ult.kg)}<span>kg</span></b></div>
+    <div class="kpi alt"><small>Cambio total</small><b class="${cambio > 0 ? "neg" : cambio < 0 ? "pos" : ""}">${cambio > 0 ? "+" : ""}${fmt(cambio)}<span>kg</span></b></div>
+    <div class="kpi"><small>Ritmo</small><b>${ritmo === null ? "—" : (ritmo > 0 ? "+" : "") + fmt(ritmo)}<span>${ritmo === null ? "" : "kg/sem"}</span></b></div>
+    <div class="kpi alt"><small>Para tu meta</small><b>${m ? (restante > 0 ? fmt(restante) : "¡Listo!") : "—"}<span>${m && restante > 0 ? "kg" : m ? "" : "sin meta"}</span></b></div>`;
+
+  if (m && ini.kg !== m) {
+    const avance = Math.max(0, Math.min(100, (ini.kg - ult.kg) / (ini.kg - m) * 100));
+    $("pr-meta").innerHTML = `
+      <div class="mut">Avance hacia ${m} kg: <b style="color:var(--txt)">${Math.round(avance)}%</b></div>
+      <div class="barra"><div style="width:${avance}%"></div></div>`;
+  } else {
+    $("pr-meta").innerHTML = m ? `<div class="mut">Ya estás en tu meta de ${m} kg.</div>` : `<div class="mut">Podés fijar una meta en la pestaña Peso.</div>`;
+  }
+
+  const avg7 = datos.map((_, i) => {
+    const v = datos.slice(Math.max(0, i - 6), i + 1);
+    return Math.round(v.reduce((a, p) => a + p.kg, 0) / v.length * 10) / 10;
+  });
+  const sets = [
+    { label: "Peso", data: datos.map(p => p.kg), borderColor: "#22d3a6", backgroundColor: "rgba(34,211,166,.12)", fill: true, tension: .3, pointRadius: 3, pointHoverRadius: 6 },
+    { label: "Promedio 7 registros", data: avg7, borderColor: "#7c5cff", borderWidth: 3, tension: .4, pointRadius: 0 }
+  ];
+  if (m) sets.push({ label: "Meta", data: datos.map(() => m), borderColor: "#ffb020", borderDash: [6, 6], pointRadius: 0, borderWidth: 2 });
+  dibujar("pr-peso-chart", {
+    type: "line",
+    data: { labels: datos.map(p => p.fecha.slice(5)), datasets: sets },
+    options: { plugins: { legend: { labels: { usePointStyle: true, boxWidth: 8 } } }, scales: { y: { ticks: { callback: v => v + " kg" } } } }
+  });
+}
+
+function renderEntrenamiento() {
+  const semanas = volumenSemanas(8);
+  const actual = semanas[semanas.length - 1].vol;
+  const anterior = semanas[semanas.length - 2].vol;
+  const dif = anterior ? Math.round((actual - anterior) / anterior * 100) : null;
+  const corte = new Date(hoy()).getTime() - 30 * 864e5;
+  const sesiones30 = db.sesiones.filter(s => s.series.length && new Date(s.fecha).getTime() >= corte).length;
+
+  $("en-kpis").innerHTML = `
+    <div class="kpi"><small>Sesiones (30 días)</small><b>${sesiones30}</b></div>
+    <div class="kpi alt"><small>Volumen esta semana</small><b>${actual.toLocaleString("es-AR")}<span>kg</span></b></div>
+    <div class="kpi"><small>Vs. semana anterior</small><b class="${dif > 0 ? "pos" : dif < 0 ? "neg" : ""}">${dif === null ? "—" : (dif > 0 ? "+" : "") + dif + "%"}</b></div>`;
+
+  dibujar("en-semanas-chart", {
+    type: "bar",
+    data: {
+      labels: semanas.map(s => s.label),
+      datasets: [{ label: "Volumen (kg)", data: semanas.map(s => s.vol),
+        backgroundColor: semanas.map((_, i) => i === semanas.length - 1 ? "#22d3a6" : "rgba(124,92,255,.55)"),
+        borderRadius: 8 }]
+    },
+    options: { plugins: { legend: { display: false } } }
+  });
+}
+
+function renderProgresoEjercicio() {
   const ejs = ejerciciosConocidos();
   const sel = $("p-ej");
   const actual = sel.value;
@@ -378,84 +804,35 @@ function renderProgreso() {
     if (metrica === "max") v = Math.max(...xs.map(x => x.kg));
     if (metrica === "e1rm") v = Math.max(...xs.map(x => e1rm(x.kg, x.reps)));
     if (metrica === "vol") v = xs.reduce((a, x) => a + x.kg * x.reps, 0);
-    puntos.push({ x: s.fecha, y: Math.round(v * 10) / 10 });
+    puntos.push({ x: s.fecha.slice(5), y: Math.round(v * 10) / 10, f: s.fecha });
   });
-  if (chartProg) chartProg.destroy();
-  chartProg = new Chart($("p-chart"), {
+  dibujar("p-chart", {
     type: "line",
-    data: { labels: puntos.map(p => p.x), datasets: [{ label: metrica, data: puntos.map(p => p.y), borderColor: "#4cc38a", tension: .2 }] },
-    options: { plugins: { legend: { labels: { color: "#e8eaf0" } } }, scales: { x: { ticks: { color: "#8a90a0" } }, y: { ticks: { color: "#8a90a0" } } } }
+    data: { labels: puntos.map(p => p.x), datasets: [{ label: metrica, data: puntos.map(p => p.y), borderColor: "#7c5cff", backgroundColor: "rgba(124,92,255,.15)", fill: true, tension: .3, pointRadius: 4 }] },
+    options: { plugins: { legend: { display: false } } }
   });
   if (puntos.length) {
     const mejor = puntos.reduce((a, b) => b.y > a.y ? b : a);
     const delta = Math.round((puntos[puntos.length - 1].y - puntos[0].y) * 10) / 10;
     $("p-stats").innerHTML = `
-      <div class="stat"><b>${puntos[puntos.length - 1].y}</b>último</div>
-      <div class="stat"><b class="pr">${mejor.y}</b>récord (${mejor.x})</div>
-      <div class="stat"><b>${delta >= 0 ? "+" : ""}${delta}</b>desde el inicio</div>
-      <div class="stat"><b>${puntos.length}</b>sesiones</div>`;
+      <div class="kpi"><small>Último</small><b>${puntos[puntos.length - 1].y}</b></div>
+      <div class="kpi alt"><small>Récord (${mejor.f})</small><b class="pos">${mejor.y}</b></div>
+      <div class="kpi"><small>Desde el inicio</small><b class="${delta > 0 ? "pos" : delta < 0 ? "neg" : ""}">${delta > 0 ? "+" : ""}${delta}</b></div>
+      <div class="kpi alt"><small>Sesiones</small><b>${puntos.length}</b></div>`;
   } else {
     $("p-stats").innerHTML = '<p class="mut">Sin datos para este ejercicio todavía.</p>';
   }
-  renderSemana();
+}
+
+function renderProgreso() {
+  renderProgresoPeso();
+  renderEntrenamiento();
+  renderProgresoEjercicio();
 }
 $("p-ej").onchange = renderProgreso;
 $("p-metrica").onchange = renderProgreso;
 
-function renderSemana() {
-  const ahora = new Date();
-  const fecha = d => new Date(ahora.getTime() - d * 864e5).toISOString().slice(0, 10);
-  const vol = (desde, hasta) => db.sesiones.filter(s => s.fecha > desde && s.fecha <= hasta)
-    .reduce((a, s) => ({ sesiones: a.sesiones + 1, vol: a.vol + s.series.reduce((b, x) => b + x.kg * x.reps, 0) }), { sesiones: 0, vol: 0 });
-  const esta = vol(fecha(7), hoy());
-  const previa = vol(fecha(14), fecha(7));
-  const dif = previa.vol ? Math.round((esta.vol - previa.vol) / previa.vol * 100) : null;
-  $("p-semana").innerHTML = `
-    <div class="stat"><b>${esta.sesiones}</b>sesiones (7 días)</div>
-    <div class="stat"><b>${Math.round(esta.vol)}</b>kg de volumen</div>
-    <div class="stat"><b>${dif === null ? "—" : (dif >= 0 ? "+" : "") + dif + "%"}</b>vs semana anterior</div>`;
-}
-
-// ---- Peso ----
-let chartPeso = null;
-$("pc-guardar").onclick = async () => {
-  const fecha = $("pc-fecha").value || hoy();
-  const kg = parseFloat($("pc-kg").value);
-  if (!kg) return alert("Ingresá el peso.");
-  await run(sb.from("peso").upsert({ user_id: user.id, fecha, kg }, { onConflict: "user_id,fecha" }));
-  $("pc-kg").value = "";
-  await cargarTodo();
-  renderTodo();
-};
-async function borrarPeso(id) {
-  await run(sb.from("peso").delete().eq("id", id));
-  await cargarTodo();
-  renderTodo();
-}
-function renderPeso() {
-  const datos = db.peso;
-  const media = datos.map((_, i) => {
-    const v = datos.slice(Math.max(0, i - 6), i + 1);
-    return Math.round(v.reduce((a, p) => a + p.kg, 0) / v.length * 10) / 10;
-  });
-  if (chartPeso) chartPeso.destroy();
-  chartPeso = new Chart($("pc-chart"), {
-    type: "line",
-    data: { labels: datos.map(p => p.fecha), datasets: [
-      { label: "Peso", data: datos.map(p => p.kg), borderColor: "#8a90a0", pointRadius: 3, tension: 0 },
-      { label: "Promedio 7 registros", data: media, borderColor: "#4cc38a", tension: .3 }
-    ]},
-    options: { plugins: { legend: { labels: { color: "#e8eaf0" } } }, scales: { x: { ticks: { color: "#8a90a0" } }, y: { ticks: { color: "#8a90a0" } } } }
-  });
-  $("pc-info").textContent = datos.length >= 2
-    ? `Cambio desde el primer registro: ${(datos[datos.length - 1].kg - datos[0].kg).toFixed(1)} kg. La tendencia se lee mejor en la línea verde.`
-    : "Cargá al menos dos registros para ver la tendencia.";
-  $("pc-lista").innerHTML = datos.slice(-10).reverse().map(p =>
-    `<div class="row"><b>${p.fecha}</b><span>${p.kg} kg</span>
-     <button class="danger" onclick="borrarPeso('${p.id}')">Borrar</button></div>`).join("");
-}
-
-// ---- Datos ----
+// ---------- Datos ----------
 $("d-exportar").onclick = () => {
   const blob = new Blob([JSON.stringify(db, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
@@ -463,6 +840,38 @@ $("d-exportar").onclick = () => {
   a.download = "gymapp-" + hoy() + ".json";
   a.click();
 };
+
+$("d-borrar").onclick = async () => {
+  if (!navigator.onLine) return alert("Necesitás conexión para borrar todo.");
+  if (!confirm("¿Borrar TODOS tus datos de la nube? No se puede deshacer.")) return;
+  if (prompt('Para confirmar, escribí BORRAR') !== "BORRAR") return;
+  for (const t of ["series", "sesiones", "rutinas", "peso"]) {
+    const { error } = await sb.from(t).delete().eq("user_id", user.id);
+    if (error) return alert("Error al borrar " + t + ": " + error.message);
+  }
+  cola = []; db = { rutinas: [], sesiones: [], peso: [] }; sesionActualId = null;
+  guardarTodo();
+  renderTodo();
+  alert("Datos borrados.");
+};
+
+// ---------- Render general ----------
+function renderTodo() {
+  refrescarSelects();
+  renderSesion();
+  renderRutinas();
+  if (!$("vista-progreso").classList.contains("hidden")) renderProgreso();
+  if (!$("vista-peso").classList.contains("hidden")) renderPeso();
+  pintarEstado();
+}
+
+// Registro del service worker (permite usar la app sin conexión)
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+
+$("s-fecha").value = hoy();
+$("pc-fecha").value = hoy();
+refrescarSelects();
+renderTodo();
 </script>
 </body>
 </html>
