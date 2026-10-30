@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gym App</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root { --bg:#0f1115; --card:#1a1d24; --txt:#e8eaf0; --mut:#8a90a0; --acc:#4cc38a; --warn:#e5a13a; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:var(--txt); }
+  header { padding:12px 16px; background:var(--card); position:sticky; top:0; z-index:5; display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:space-between; }
+  header h1 { font-size:18px; margin:0; }
+  nav button { background:none; border:1px solid #333; color:var(--txt); padding:6px 10px; border-radius:8px; margin-left:4px; cursor:pointer; }
+  nav button.on { background:var(--acc); color:#000; border-color:var(--acc); }
+  main { padding:16px; max-width:900px; margin:0 auto; }
+  .card { background:var(--card); border-radius:12px; padding:14px; margin-bottom:14px; }
+  h2 { font-size:16px; margin:0 0 10px; }
+  input, select, textarea { background:#0f1115; color:var(--txt); border:1px solid #333; border-radius:8px; padding:8px; font-size:15px; }
+  input[type=number] { width:80px; }
+  input[type=text] { width:100%; }
+  button.btn { background:var(--acc); color:#000; border:0; border-radius:8px; padding:8px 12px; font-weight:600; cursor:pointer; }
+  button.ghost { background:none; border:1px solid #444; color:var(--txt); border-radius:8px; padding:6px 10px; cursor:pointer; }
+  button.danger { background:none; border:1px solid var(--warn); color:var(--warn); border-radius:8px; padding:6px 10px; cursor:pointer; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  td, th { padding:6px 4px; border-bottom:1px solid #2a2e38; text-align:left; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:8px; }
+  .mut { color:var(--mut); font-size:13px; }
+  .stat { display:inline-block; background:#0f1115; border-radius:10px; padding:10px 12px; margin:4px; min-width:120px; }
+  .stat b { display:block; font-size:20px; }
+  .pr { color:var(--acc); font-weight:600; }
+  canvas { max-height:260px; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Gym App</h1>
+  <nav>
+    <button data-tab="sesion" class="on">Sesión</button>
+    <button data-tab="rutinas">Rutinas</button>
+    <button data-tab="progreso">Progreso</button>
+    <button data-tab="peso">Peso</button>
+    <button data-tab="datos">Datos</button>
+  </nav>
+</header>
+
+<main>
+  <!-- SESIÓN -->
+  <section id="tab-sesion">
+    <div class="card">
+      <h2>Registrar entrenamiento</h2>
+      <div class="row">
+        <input type="date" id="s-fecha">
+        <select id="s-rutina"></select>
+        <button class="btn" id="s-iniciar">Usar rutina</button>
+      </div>
+      <div class="row">
+        <input type="text" id="s-ej" placeholder="Ejercicio (ej: Press banca)" list="ej-list">
+        <datalist id="ej-list"></datalist>
+      </div>
+      <div class="row">
+        <input type="number" id="s-series" placeholder="Series" min="1" value="3">
+        <input type="number" id="s-reps" placeholder="Reps" min="1" value="10">
+        <input type="number" id="s-peso" placeholder="Kg" min="0" step="0.5">
+        <input type="number" id="s-rpe" placeholder="RPE (1-10)" min="1" max="10" step="0.5">
+      </div>
+      <div class="row">
+        <button class="btn" id="s-agregar">Agregar serie(s)</button>
+        <button class="ghost" id="s-cerrar">Cerrar sesión</button>
+      </div>
+      <p class="mut">Cada serie se guarda al agregarla. Si el ejercicio ya está en la sesión, se suman las series nuevas.</p>
+    </div>
+    <div class="card">
+      <h2>Sesión actual <span class="mut" id="s-info"></span></h2>
+      <table><thead><tr><th>Ejercicio</th><th>Series</th><th>Reps</th><th>Kg</th><th>RPE</th><th></th></tr></thead>
+      <tbody id="s-tabla"></tbody></table>
+    </div>
+    <div class="card">
+      <h2>Últimas sesiones</h2>
+      <div id="s-historial"></div>
+    </div>
+  </section>
+
+  <!-- RUTINAS -->
+  <section id="tab-rutinas" class="hidden">
+    <div class="card">
+      <h2>Nueva rutina</h2>
+      <div class="row"><input type="text" id="r-nombre" placeholder="Nombre (ej: Día A - Empuje)"></div>
+      <div class="row"><input type="text" id="r-ejs" placeholder="Ejercicios separados por coma"></div>
+      <div class="row"><button class="btn" id="r-guardar">Guardar rutina</button></div>
+    </div>
+    <div class="card"><h2>Rutinas guardadas</h2><div id="r-lista"></div></div>
+  </section>
+
+  <!-- PROGRESO -->
+  <section id="tab-progreso" class="hidden">
+    <div class="card">
+      <h2>Progreso por ejercicio</h2>
+      <div class="row">
+        <select id="p-ej"></select>
+        <select id="p-metrica">
+          <option value="max">Peso máximo</option>
+          <option value="e1rm">1RM estimado (Epley)</option>
+          <option value="vol">Volumen por sesión</option>
+        </select>
+      </div>
+      <canvas id="p-chart"></canvas>
+      <div id="p-stats"></div>
+    </div>
+    <div class="card">
+      <h2>Resumen semanal</h2>
+      <div id="p-semana"></div>
+    </div>
+  </section>
+
+  <!-- PESO -->
+  <section id="tab-peso" class="hidden">
+    <div class="card">
+      <h2>Peso corporal</h2>
+      <div class="row">
+        <input type="date" id="pc-fecha">
+        <input type="number" id="pc-kg" placeholder="Kg" step="0.1" min="20">
+        <button class="btn" id="pc-guardar">Guardar</button>
+      </div>
+      <canvas id="pc-chart"></canvas>
+      <p class="mut" id="pc-info"></p>
+    </div>
+  </section>
+
+  <!-- DATOS -->
+  <section id="tab-datos" class="hidden">
+    <div class="card">
+      <h2>Copia de seguridad</h2>
+      <p class="mut">Los datos se guardan solo en este navegador. Exportá una copia de vez en cuando.</p>
+      <div class="row">
+        <button class="btn" id="d-exportar">Exportar JSON</button>
+        <input type="file" id="d-importar" accept="application/json">
+      </div>
+      <div class="row"><button class="danger" id="d-borrar">Borrar todo</button></div>
+    </div>
+  </section>
+</main>
+
+<script>
+const KEY = "gymapp_v1";
+let db = cargar();
+let sesionActual = null;
+
+function cargar() {
+  try {
+    const d = JSON.parse(localStorage.getItem(KEY));
+    if (d) return d;
+  } catch (e) {}
+  return { rutinas: [], sesiones: [], peso: [] };
+}
+function guardar() { localStorage.setItem(KEY, JSON.stringify(db)); }
+function hoy() { return new Date().toISOString().slice(0, 10); }
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+function e1rm(kg, reps) { return reps === 1 ? kg : kg * (1 + reps / 30); }
+
+// Navegación
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("nav button").forEach(x => x.classList.remove("on"));
+  b.classList.add("on");
+  document.querySelectorAll("main section").forEach(s => s.classList.add("hidden"));
+  document.getElementById("tab-" + b.dataset.tab).classList.remove("hidden");
+  if (b.dataset.tab === "progreso") renderProgreso();
+  if (b.dataset.tab === "peso") renderPeso();
+  if (b.dataset.tab === "rutinas") renderRutinas();
+});
+
+// SESIÓN
+function ejerciciosConocidos() {
+  const set = new Set();
+  db.sesiones.forEach(s => s.series.forEach(x => set.add(x.ej)));
+  db.rutinas.forEach(r => r.ejercicios.forEach(e => set.add(e)));
+  return [...set].sort();
+}
+function refrescarSesionSelects() {
+  const sel = document.getElementById("s-rutina");
+  sel.innerHTML = '<option value="">— rutina —</option>' + db.rutinas.map(r => `<option value="${r.id}">${esc(r.nombre)}</option>`).join("");
+  document.getElementById("ej-list").innerHTML = ejerciciosConocidos().map(e => `<option value="${esc(e)}">`).join("");
+  document.getElementById("s-fecha").value = document.getElementById("s-fecha").value || hoy();
+}
+function asegurarSesion() {
+  if (!sesionActual) {
+    sesionActual = { id: uid(), fecha: document.getElementById("s-fecha").value || hoy(), series: [] };
+    db.sesiones.push(sesionActual);
+  }
+}
+document.getElementById("s-iniciar").onclick = () => {
+  const r = db.rutinas.find(x => x.id === document.getElementById("s-rutina").value);
+  if (!r) return alert("Elegí una rutina.");
+  asegurarSesion();
+  r.ejercicios.forEach(e => {
+    if (!sesionActual.series.some(x => x.ej === e)) {
+      document.getElementById("s-ej").value = e;
+      document.getElementById("s-ej").dispatchEvent(new Event("input"));
+    }
+  });
+  document.getElementById("s-ej").value = "";
+  renderSesion();
+};
+document.getElementById("s-agregar").onclick = () => {
+  const ej = document.getElementById("s-ej").value.trim();
+  const series = parseInt(document.getElementById("s-series").value) || 1;
+  const reps = parseInt(document.getElementById("s-reps").value);
+  const kg = parseFloat(document.getElementById("s-peso").value) || 0;
+  const rpe = parseFloat(document.getElementById("s-rpe").value) || null;
+  if (!ej || !reps) return alert("Completá ejercicio y repeticiones.");
+  asegurarSesion();
+  for (let i = 0; i < series; i++) sesionActual.series.push({ id: uid(), ej, reps, kg, rpe });
+  guardar();
+  renderSesion();
+  refrescarSesionSelects();
+};
+document.getElementById("s-cerrar").onclick = () => {
+  if (sesionActual && sesionActual.series.length === 0) db.sesiones = db.sesiones.filter(s => s.id !== sesionActual.id);
+  sesionActual = null;
+  guardar();
+  renderSesion();
+};
+function borrarSerie(id) {
+  sesionActual.series = sesionActual.series.filter(x => x.id !== id);
+  if (sesionActual.series.length === 0) { db.sesiones = db.sesiones.filter(s => s.id !== sesionActual.id); sesionActual = null; }
+  guardar(); renderSesion(); refrescarSesionSelects();
+}
+function renderSesion() {
+  const tbody = document.getElementById("s-tabla");
+  const info = document.getElementById("s-info");
+  if (!sesionActual) {
+    tbody.innerHTML = "";
+    info.textContent = "(sin sesión abierta)";
+  } else {
+    info.textContent = sesionActual.fecha;
+    const grupos = {};
+    sesionActual.series.forEach(x => { (grupos[x.ej] = grupos[x.ej] || []).push(x); });
+    tbody.innerHTML = Object.entries(grupos).map(([ej, arr]) => {
+      const reps = arr.map(x => x.reps).join(", ");
+      const kg = [...new Set(arr.map(x => x.kg))].join(", ");
+      const rpe = arr.map(x => x.rpe ?? "-").join(", ");
+      return `<tr><td>${esc(ej)}</td><td>${arr.length}</td><td>${reps}</td><td>${kg}</td><td>${rpe}</td>
+        <td><button class="ghost" onclick="borrarSerie('${arr[arr.length-1].id}')">−1</button></td></tr>`;
+    }).join("");
+  }
+  const hist = db.sesiones.filter(s => s !== sesionActual).slice(-5).reverse();
+  document.getElementById("s-historial").innerHTML = hist.length ? hist.map(s => {
+    const ejs = [...new Set(s.series.map(x => x.ej))].join(", ");
+    const vol = s.series.reduce((a, x) => a + x.reps * x.kg, 0);
+    return `<div class="row"><b>${s.fecha}</b><span class="mut">${esc(ejs)} · ${s.series.length} series · vol ${Math.round(vol)} kg</span></div>`;
+  }).join("") : '<p class="mut">Todavía no hay sesiones.</p>';
+}
+
+// RUTINAS
+document.getElementById("r-guardar").onclick = () => {
+  const nombre = document.getElementById("r-nombre").value.trim();
+  const ejercicios = document.getElementById("r-ejs").value.split(",").map(s => s.trim()).filter(Boolean);
+  if (!nombre || !ejercicios.length) return alert("Poné nombre y al menos un ejercicio.");
+  db.rutinas.push({ id: uid(), nombre, ejercicios });
+  guardar();
+  document.getElementById("r-nombre").value = ""; document.getElementById("r-ejs").value = "";
+  renderRutinas(); refrescarSesionSelects();
+};
+function borrarRutina(id) {
+  if (!confirm("¿Borrar esta rutina? Las sesiones registradas no se borran.")) return;
+  db.rutinas = db.rutinas.filter(r => r.id !== id);
+  guardar(); renderRutinas(); refrescarSesionSelects();
+}
+function renderRutinas() {
+  document.getElementById("r-lista").innerHTML = db.rutinas.length ? db.rutinas.map(r =>
+    `<div class="row"><b>${esc(r.nombre)}</b><span class="mut">${esc(r.ejercicios.join(" · "))}</span>
+     <button class="danger" onclick="borrarRutina('${r.id}')">Borrar</button></div>`).join("")
+    : '<p class="mut">Creá tu primera rutina.</p>';
+}
+
+// PROGRESO
+let chartProg = null;
+function renderProgreso() {
+  const ejs = ejerciciosConocidos();
+  const sel = document.getElementById("p-ej");
+  const actual = sel.value;
+  sel.innerHTML = ejs.map(e => `<option>${esc(e)}</option>`).join("");
+  if (actual && ejs.includes(actual)) sel.value = actual;
+  const ej = sel.value;
+  const metrica = document.getElementById("p-metrica").value;
+  const puntos = [];
+  db.sesiones.slice().sort((a, b) => a.fecha.localeCompare(b.fecha)).forEach(s => {
+    const xs = s.series.filter(x => x.ej === ej);
+    if (!xs.length) return;
+    let v;
+    if (metrica === "max") v = Math.max(...xs.map(x => x.kg));
+    if (metrica === "e1rm") v = Math.max(...xs.map(x => e1rm(x.kg, x.reps)));
+    if (metrica === "vol") v = xs.reduce((a, x) => a + x.kg * x.reps, 0);
+    puntos.push({ x: s.fecha, y: Math.round(v * 10) / 10 });
+  });
+  if (chartProg) chartProg.destroy();
+  chartProg = new Chart(document.getElementById("p-chart"), {
+    type: "line",
+    data: { labels: puntos.map(p => p.x), datasets: [{ label: metrica, data: puntos.map(p => p.y), borderColor: "#4cc38a", tension: .2 }] },
+    options: { plugins: { legend: { labels: { color: "#e8eaf0" } } }, scales: { x: { ticks: { color: "#8a90a0" } }, y: { ticks: { color: "#8a90a0" } } } }
+  });
+  let stats = "";
+  if (puntos.length) {
+    const mejor = puntos.reduce((a, b) => b.y > a.y ? b : a);
+    const primero = puntos[0].y, ultimo = puntos[puntos.length - 1].y;
+    const delta = Math.round((ultimo - primero) * 10) / 10;
+    stats = `<div class="stat"><b>${ultimo}</b>último</div>
+             <div class="stat"><b class="pr">${mejor.y}</b>récord (${mejor.x})</div>
+             <div class="stat"><b>${delta >= 0 ? "+" : ""}${delta}</b>desde el inicio</div>
+             <div class="stat"><b>${puntos.length}</b>sesiones</div>`;
+  } else stats = '<p class="mut">Sin datos para este ejercicio todavía.</p>';
+  document.getElementById("p-stats").innerHTML = stats;
+  renderSemana();
+}
+document.getElementById("p-ej").onchange = renderProgreso;
+document.getElementById("p-metrica").onchange = renderProgreso;
+function renderSemana() {
+  const hace7 = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
+  const hace14 = new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10);
+  const vol = (desde, hasta) => db.sesiones.filter(s => s.fecha > desde && s.fecha <= hasta)
+    .reduce((a, s) => ({ sesiones: a.sesiones + 1, vol: a.vol + s.series.reduce((b, x) => b + x.kg * x.reps, 0) }), { sesiones: 0, vol: 0 });
+  const esta = vol(hace7, hoy()), previa = vol(hace14, hace7);
+  const dif = previa.vol ? Math.round((esta.vol - previa.vol) / previa.vol * 100) : null;
+  document.getElementById("p-semana").innerHTML =
+    `<div class="stat"><b>${esta.sesiones}</b>sesiones (7 días)</div>
+     <div class="stat"><b>${Math.round(esta.vol)}</b>kg de volumen</div>
+     <div class="stat"><b>${dif === null ? "—" : (dif >= 0 ? "+" : "") + dif + "%"}</b>vs semana anterior</div>`;
+}
+
+// PESO
+let chartPeso = null;
+document.getElementById("pc-guardar").onclick = () => {
+  const fecha = document.getElementById("pc-fecha").value || hoy();
+  const kg = parseFloat(document.getElementById("pc-kg").value);
+  if (!kg) return alert("Ingresá el peso.");
+  db.peso = db.peso.filter(p => p.fecha !== fecha);
+  db.peso.push({ fecha, kg });
+  guardar();
+  document.getElementById("pc-kg").value = "";
+  renderPeso();
+};
+function renderPeso() {
+  document.getElementById("pc-fecha").value = document.getElementById("pc-fecha").value || hoy();
+  const datos = db.peso.slice().sort((a, b) => a.fecha.localeCompare(b.fecha));
+  // promedio móvil de 7 registros
+  const media = datos.map((_, i) => {
+    const ventana = datos.slice(Math.max(0, i - 6), i + 1);
+    return Math.round(ventana.reduce((a, p) => a + p.kg, 0) / ventana.length * 10) / 10;
+  });
+  if (chartPeso) chartPeso.destroy();
+  chartPeso = new Chart(document.getElementById("pc-chart"), {
+    type: "line",
+    data: { labels: datos.map(p => p.fecha), datasets: [
+      { label: "Peso", data: datos.map(p => p.kg), borderColor: "#8a90a0", pointRadius: 3, tension: 0 },
+      { label: "Promedio 7 registros", data: media, borderColor: "#4cc38a", tension: .3 }
+    ]},
+    options: { plugins: { legend: { labels: { color: "#e8eaf0" } } }, scales: { x: { ticks: { color: "#8a90a0" } }, y: { ticks: { color: "#8a90a0" } } } }
+  });
+  const info = datos.length >= 2
+    ? `Cambio desde el primer registro: ${(datos[datos.length-1].kg - datos[0].kg).toFixed(1)} kg. La tendencia se lee mejor en la línea verde.`
+    : "Cargá al menos dos registros para ver la tendencia.";
+  document.getElementById("pc-info").textContent = info;
+}
+
+// DATOS
+document.getElementById("d-exportar").onclick = () => {
+  const blob = new Blob([JSON.stringify(db, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "gymapp-" + hoy() + ".json";
+  a.click();
+};
+document.getElementById("d-importar").onchange = async e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  try {
+    const d = JSON.parse(await f.text());
+    if (!d.rutinas || !d.sesiones || !d.peso) throw new Error("formato");
+    db = d; guardar(); sesionActual = null;
+    alert("Datos importados."); location.reload();
+  } catch (err) { alert("El archivo no es válido."); }
+};
+document.getElementById("d-borrar").onclick = () => {
+  if (!confirm("¿Borrar todos los datos de este navegador?")) return;
+  localStorage.removeItem(KEY); location.reload();
+};
+
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+// Inicio
+document.getElementById("s-fecha").value = hoy();
+refrescarSesionSelects();
+renderSesion();
+</script>
+</body>
+</html>
