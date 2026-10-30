@@ -1,6 +1,6 @@
 // Service worker: permite abrir la app sin conexión.
 // Subí el número de versión cada vez que cambies index.html, así los celulares descargan la nueva copia.
-const CACHE = "gymapp-v3";
+const CACHE = "gymapp-v4";
 
 const ESTATICOS = ["./", "./index.html", "./manifest.json", "./icon.svg"];
 const CDN = [
