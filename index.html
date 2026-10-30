@@ -161,7 +161,25 @@
       <button class="btn" id="auth-entrar">Entrar</button>
       <button class="btn sec" id="auth-crear">Crear cuenta</button>
     </div>
+    <div class="row">
+      <button class="btn sec" id="auth-olvide">Olvidé mi contraseña</button>
+    </div>
     <p class="mut" id="auth-msg"></p>
+  </div>
+</section>
+
+<!-- NUEVA CONTRASEÑA (se abre desde el enlace del correo) -->
+<section id="nueva" class="auth hidden">
+  <div class="card">
+    <h1>Nueva contraseña</h1>
+    <p class="mut">Elegí la contraseña que vas a usar desde ahora.</p>
+    <div class="grid" style="grid-template-columns:1fr">
+      <input type="password" id="nueva-pass" placeholder="Nueva contraseña (mín. 6 caracteres)">
+    </div>
+    <div class="row">
+      <button class="btn" id="nueva-guardar">Guardar contraseña</button>
+    </div>
+    <p class="mut" id="nueva-msg"></p>
   </div>
 </section>
 
@@ -280,6 +298,79 @@
     </div>
   </section>
 
+  <!-- COMIDA -->
+  <section id="vista-comida" class="hidden">
+    <div class="card">
+      <h2>Hoy <small>estimación orientativa</small></h2>
+      <div id="nu-resumen"></div>
+    </div>
+
+    <div class="card">
+      <h2>Agregar comida</h2>
+      <div class="grid">
+        <select id="com-tipo"></select>
+        <input type="date" id="com-fecha">
+      </div>
+      <div class="row">
+        <input type="text" id="com-buscar" placeholder="Buscar alimento (ej: pollo, yogur)">
+        <button class="btn sec fijo" id="com-buscar-btn">Buscar</button>
+      </div>
+      <div class="chips" id="com-resultados"></div>
+      <div class="row">
+        <input type="text" id="com-gramos" placeholder="Gramos" inputmode="decimal">
+        <button class="btn fijo" id="com-agregar">Agregar</button>
+      </div>
+      <p class="mut" id="com-info"></p>
+    </div>
+
+    <div class="card">
+      <h2>Comidas de hoy</h2>
+      <div id="nu-hoy"></div>
+    </div>
+
+    <div class="card">
+      <h2>Últimos 7 días <small>kcal vs. referencia</small></h2>
+      <div class="chartbox"><canvas id="nu-semana"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h2>Mi perfil</h2>
+      <div class="grid">
+        <select id="perf-sexo">
+          <option value="">Sexo</option>
+          <option value="hombre">Hombre</option>
+          <option value="mujer">Mujer</option>
+        </select>
+        <input type="number" id="perf-edad" placeholder="Edad" inputmode="numeric">
+        <input type="text" id="perf-altura" placeholder="Altura (cm)" inputmode="decimal">
+        <select id="perf-dias">
+          <option value="0">0–1 días por semana</option>
+          <option value="2">2–3 días</option>
+          <option value="4">4–5 días</option>
+          <option value="6">6–7 días</option>
+        </select>
+      </div>
+      <div class="row"><button class="btn" id="perfil-guardar">Guardar perfil</button></div>
+      <p class="mut">El peso se toma del último registro de la pestaña Peso.</p>
+    </div>
+
+    <div class="card">
+      <h2>Objetivos por período</h2>
+      <div class="grid">
+        <select id="obj-tipo">
+          <option value="mantener">Mantener</option>
+          <option value="ganar">Ganar masa</option>
+          <option value="bajar">Bajar grasa conservando músculo</option>
+        </select>
+        <input type="date" id="obj-desde">
+        <input type="date" id="obj-hasta">
+      </div>
+      <div class="row"><button class="btn" id="obj-agregar">Agregar período</button></div>
+      <p class="mut">Si ningún período cubre una fecha, se usa "Mantener".</p>
+      <div id="obj-lista"></div>
+    </div>
+  </section>
+
   <!-- DATOS -->
   <section id="vista-datos" class="hidden">
     <div class="card">
@@ -300,6 +391,7 @@
   <button data-tab="rutinas"><span class="ico">📋</span>Rutinas</button>
   <button data-tab="progreso"><span class="ico">📈</span>Progreso</button>
   <button data-tab="peso"><span class="ico">⚖️</span>Peso</button>
+  <button data-tab="comida"><span class="ico">🥗</span>Comida</button>
   <button data-tab="datos"><span class="ico">⚙️</span>Datos</button>
 </nav>
 
@@ -311,14 +403,22 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const K_CACHE = "gymapp_cache", K_COLA = "gymapp_cola", K_META = "gymapp_meta";
 // Para peso la clave de conflicto es (usuario, fecha); para el resto, el id.
-const ONCONFLICT = { peso: "user_id,fecha" };
+const ONCONFLICT = { peso: "user_id,fecha", perfil: "user_id" };
+
+function DB_VACIA() {
+  return { rutinas: [], sesiones: [], peso: [], perfil: null, objetivos: [], comidas: [] };
+}
+function normalizarDB(d) {
+  return Object.assign(DB_VACIA(), d || {});
+}
 
 // ---------- Estado ----------
 let user = null;
-let db = leerJSON(K_CACHE, { rutinas: [], sesiones: [], peso: [] });
+let db = normalizarDB(leerJSON(K_CACHE, null));
 let cola = leerJSON(K_COLA, []);      // cambios pendientes de subir, en orden
 let ajustes = leerJSON(K_META, { meta: null });
 let sesionActualId = null;
+let modoRecuperacion = false;
 let sincronizando = false;
 let ultimoError = "";
 const charts = {};
@@ -410,16 +510,22 @@ async function sincronizar() {
 }
 
 async function descargar() {
-  const [r, s, p] = await Promise.all([
+  const [r, s, p, pf, ob, co] = await Promise.all([
     sb.from("rutinas").select("id,nombre,ejercicios,created_at").order("created_at"),
     sb.from("sesiones").select("id,fecha,series(id,ejercicio,reps,kg,rpe,created_at)").order("fecha"),
-    sb.from("peso").select("fecha,kg").order("fecha")
+    sb.from("peso").select("fecha,kg").order("fecha"),
+    sb.from("perfil").select("user_id,sexo,edad,altura_cm,dias_semana"),
+    sb.from("objetivos").select("id,user_id,tipo,desde,hasta").order("desde"),
+    sb.from("comidas").select("id,user_id,fecha,tipo,nombre,fuente,kcal100,prot100,carb100,grasa100,gramos").order("fecha")
   ]);
-  for (const res of [r, s, p]) if (res.error) throw res.error;
+  for (const res of [r, s, p, pf, ob, co]) if (res.error) throw res.error;
   // Si mientras bajaba hubo cambios locales nuevos, no se pisan: se suben primero.
   if (cola.length) return;
   s.data.forEach(ses => ses.series.sort((a, b) => a.created_at.localeCompare(b.created_at)));
-  db = { rutinas: r.data, sesiones: s.data, peso: p.data };
+  db = {
+    rutinas: r.data, sesiones: s.data, peso: p.data,
+    perfil: pf.data[0] ?? null, objetivos: ob.data, comidas: co.data
+  };
   guardarTodo();
   renderTodo();
 }
@@ -437,19 +543,51 @@ $("auth-crear").onclick = async () => {
   const { error } = await sb.auth.signUp({ email: $("auth-email").value.trim(), password: $("auth-pass").value });
   $("auth-msg").textContent = error ? "No se pudo crear la cuenta: " + error.message : "Cuenta creada. Ya podés entrar.";
 };
+$("auth-olvide").onclick = async () => {
+  const email = $("auth-email").value.trim();
+  if (!email) { $("auth-msg").textContent = "Escribí tu correo primero."; return; }
+  // Vuelve a esta misma página; ahí se abre la pantalla de nueva contraseña.
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+  $("auth-msg").textContent = error
+    ? "No se pudo enviar el correo: " + error.message
+    : "Te enviamos un correo para cambiar la contraseña. Revisá también spam.";
+};
+
+$("nueva-guardar").onclick = async () => {
+  const p = $("nueva-pass").value;
+  if (p.length < 6) { $("nueva-msg").textContent = "Mínimo 6 caracteres."; return; }
+  const { error } = await sb.auth.updateUser({ password: p });
+  if (error) { $("nueva-msg").textContent = "No se pudo guardar: " + error.message; return; }
+  modoRecuperacion = false;
+  history.replaceState(null, "", location.pathname);
+  $("nueva-pass").value = "";
+  alert("Contraseña actualizada. Ya podés usar la app.");
+  mostrarVista();
+  setTimeout(() => { renderTodo(); sincronizar(); }, 0);
+};
+
 $("salir").onclick = async () => {
   if (cola.length && !confirm(`Hay ${cola.length} cambio(s) sin subir. Si salís, se pierden. ¿Continuar?`)) return;
-  cola = []; db = { rutinas: [], sesiones: [], peso: [] }; sesionActualId = null;
+  cola = []; db = DB_VACIA(); sesionActualId = null;
   guardarTodo();
   await sb.auth.signOut();
 };
 
-sb.auth.onAuthStateChange((_event, session) => {
+function mostrarVista() {
+  const recup = modoRecuperacion;
+  const logueado = !!user && !recup;
+  $("nueva").classList.toggle("hidden", !recup);
+  $("auth").classList.toggle("hidden", recup || !!user);
+  $("app").classList.toggle("hidden", !logueado);
+  $("tabs").classList.toggle("hidden", !logueado);
+  $("salir").classList.toggle("hidden", !logueado);
+}
+
+sb.auth.onAuthStateChange((event, session) => {
+  // El enlace del correo de recuperación dispara este evento.
+  if (event === "PASSWORD_RECOVERY") modoRecuperacion = true;
   user = session?.user ?? null;
-  $("auth").classList.toggle("hidden", !!user);
-  $("app").classList.toggle("hidden", !user);
-  $("tabs").classList.toggle("hidden", !user);
-  $("salir").classList.toggle("hidden", !user);
+  mostrarVista();
   // Diferido para no hacer consultas dentro del callback de autenticación.
   setTimeout(() => { renderTodo(); sincronizar(); }, 0);
 });
@@ -463,6 +601,7 @@ document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => {
   window.scrollTo(0, 0);
   if (b.dataset.tab === "progreso") renderProgreso();
   if (b.dataset.tab === "peso") renderPeso();
+  if (b.dataset.tab === "comida") renderNutricion();
 });
 
 // ---------- Sesión ----------
@@ -832,6 +971,254 @@ function renderProgreso() {
 $("p-ej").onchange = renderProgreso;
 $("p-metrica").onchange = renderProgreso;
 
+// ---------- Comida ----------
+const TIPOS_COMIDA = ["Desayuno", "Almuerzo", "Merienda", "Cena", "Otro"];
+// Rangos orientativos: multiplicadores del gasto energético y gramos de proteína por kilo.
+// Son valores de referencia habituales, no una prescripción: conviene validarlos con un nutricionista.
+const RANGOS = {
+  mantener: { kcal: [0.95, 1.05], ref: 1.00, prot: [1.6, 2.0] },
+  ganar:    { kcal: [1.05, 1.15], ref: 1.10, prot: [1.6, 2.2] },
+  bajar:    { kcal: [0.80, 0.90], ref: 0.85, prot: [2.0, 2.4] }
+};
+const NOMBRE_OBJ = { mantener: "Mantener", ganar: "Ganar masa", bajar: "Bajar grasa conservando músculo" };
+const PISO_KCAL = { hombre: 1500, mujer: 1200 };
+const FACTOR_ACT = d => d <= 1 ? 1.2 : d <= 3 ? 1.375 : d <= 5 ? 1.55 : 1.725;
+// Reemplazá DEMO_KEY por una clave gratuita de api.data.gov para evitar límites de uso.
+const USDA_KEY = "DEMO_KEY";
+let resultados = [];
+let alimentoElegido = null;
+
+function sumarDias(f, n) {
+  const d = new Date(f);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+function objetivoDe(fecha) {
+  const o = db.objetivos.find(x => fecha >= x.desde && fecha <= x.hasta);
+  return o ? o.tipo : "mantener";
+}
+function pesoActual() {
+  return db.peso.length ? db.peso[db.peso.length - 1].kg : null;
+}
+function calcularNecesidades(fecha) {
+  const p = db.perfil, kg = pesoActual();
+  if (!p || !p.sexo || !p.edad || !p.altura_cm || kg === null) return null;
+  // Mifflin-St Jeor para el gasto basal, multiplicado por un factor de actividad.
+  const tmb = 10 * kg + 6.25 * p.altura_cm - 5 * p.edad + (p.sexo === "hombre" ? 5 : -161);
+  const gasto = tmb * FACTOR_ACT(p.dias_semana ?? 0);
+  const r = RANGOS[objetivoDe(fecha)];
+  const piso = PISO_KCAL[p.sexo];
+  const min = Math.max(gasto * r.kcal[0], piso);
+  const max = Math.max(gasto * r.kcal[1], min);
+  const ref = Math.max(gasto * r.ref, piso);
+  const prot = [kg * r.prot[0], kg * r.prot[1]];
+  return {
+    obj: objetivoDe(fecha), gasto, kcal: [min, max], kcalRef: ref,
+    prot, protRef: (prot[0] + prot[1]) / 2,
+    bajoPiso: gasto * r.ref < piso, piso
+  };
+}
+function totalesDia(fecha) {
+  return db.comidas.filter(c => c.fecha === fecha).reduce((a, c) => {
+    const f = c.gramos / 100;
+    a.kcal += c.kcal100 * f;
+    a.prot += c.prot100 * f;
+    a.carbo += c.carb100 * f;
+    a.grasa += c.grasa100 * f;
+    return a;
+  }, { kcal: 0, prot: 0, carbo: 0, grasa: 0 });
+}
+
+async function buscarUSDA(q) {
+  try {
+    const url = `https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${USDA_KEY}&query=${encodeURIComponent(q)}&pageSize=8`;
+    const r = await fetch(url);
+    if (!r.ok) return [];
+    const j = await r.json();
+    return (j.foods || []).map(f => {
+      const n = id => (f.foodNutrients || []).find(x => x.nutrientId === id)?.value ?? 0;
+      return { nombre: f.description, fuente: "USDA", origen: "USDA",
+        kcal100: n(1008), prot100: n(1003), carb100: n(1005), grasa100: n(1004) };
+    }).filter(x => x.kcal100 > 0);
+  } catch (e) { return []; }
+}
+
+async function buscarOFF(q) {
+  try {
+    const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=8&fields=product_name,brands,nutriments`;
+    const r = await fetch(url);
+    if (!r.ok) return [];
+    const j = await r.json();
+    return (j.products || []).filter(p => p.product_name && p.nutriments).map(p => {
+      const n = p.nutriments;
+      return { nombre: [p.product_name, p.brands].filter(Boolean).join(" · "), fuente: "OFF", origen: "Open Food Facts",
+        kcal100: n["energy-kcal_100g"] ?? 0, prot100: n["proteins_100g"] ?? 0,
+        carb100: n["carbohydrates_100g"] ?? 0, grasa100: n["fat_100g"] ?? 0 };
+    }).filter(x => x.kcal100 > 0);
+  } catch (e) { return []; }
+}
+
+async function buscarAlimento() {
+  const q = $("com-buscar").value.trim();
+  if (q.length < 2) return;
+  $("com-resultados").innerHTML = '<p class="mut">Buscando…</p>';
+  // Primero tus propias comidas anteriores, después las bases abiertas.
+  const vistos = new Map();
+  db.comidas.forEach(c => {
+    const k = c.nombre.toLowerCase();
+    if (!vistos.has(k) && k.includes(q.toLowerCase())) {
+      vistos.set(k, { nombre: c.nombre, fuente: c.fuente, origen: "Tus comidas",
+        kcal100: c.kcal100, prot100: c.prot100, carb100: c.carb100, grasa100: c.grasa100 });
+    }
+  });
+  const [usda, off] = await Promise.all([buscarUSDA(q), buscarOFF(q)]);
+  resultados = [...vistos.values(), ...usda, ...off];
+  alimentoElegido = null;
+  pintarResultados();
+  $("com-info").textContent = !navigator.onLine ? "Sin conexión: solo se muestran tus comidas anteriores." : "";
+}
+$("com-buscar-btn").onclick = buscarAlimento;
+$("com-buscar").onkeydown = e => { if (e.key === "Enter") buscarAlimento(); };
+
+function pintarResultados() {
+  $("com-resultados").innerHTML = resultados.length
+    ? resultados.map((r, i) => `<button class="chip" onclick="elegirResultado(${i})">${esc(r.nombre)} <span class="mut">· ${Math.round(r.kcal100)} kcal/100 g</span></button>`).join("")
+    : '<p class="mut">Sin resultados. Probá con otro nombre.</p>';
+}
+function elegirResultado(i) {
+  alimentoElegido = resultados[i];
+  $("com-info").textContent = `Elegido: ${alimentoElegido.nombre} (${alimentoElegido.origen}). Ingresá los gramos.`;
+}
+
+function agregarComida() {
+  if (!alimentoElegido) return alert("Elegí un alimento de la lista.");
+  const gramos = num($("com-gramos").value);
+  if (!gramos || gramos <= 0) return alert("Ingresá los gramos.");
+  const c = {
+    id: uid(), user_id: user.id,
+    fecha: $("com-fecha").value || hoy(), tipo: $("com-tipo").value,
+    nombre: alimentoElegido.nombre, fuente: alimentoElegido.fuente,
+    kcal100: alimentoElegido.kcal100, prot100: alimentoElegido.prot100,
+    carb100: alimentoElegido.carb100, grasa100: alimentoElegido.grasa100, gramos
+  };
+  db.comidas.push(c);
+  encolar({ t: "ins", tabla: "comidas", fila: c });
+  alimentoElegido = null;
+  resultados = [];
+  $("com-gramos").value = "";
+  $("com-buscar").value = "";
+  $("com-resultados").innerHTML = "";
+  $("com-info").textContent = "Comida agregada.";
+}
+$("com-agregar").onclick = agregarComida;
+
+function borrarComida(id) {
+  db.comidas = db.comidas.filter(c => c.id !== id);
+  encolar({ t: "del", tabla: "comidas", id });
+}
+
+function guardarPerfil() {
+  const sexo = $("perf-sexo").value;
+  const edad = parseInt($("perf-edad").value);
+  const altura = num($("perf-altura").value);
+  const dias = parseInt($("perf-dias").value) || 0;
+  if (!sexo || !edad || !altura) return alert("Completá sexo, edad y altura.");
+  db.perfil = { user_id: user.id, sexo, edad, altura_cm: altura, dias_semana: dias };
+  encolar({ t: "ins", tabla: "perfil", fila: db.perfil });
+}
+$("perfil-guardar").onclick = guardarPerfil;
+
+function agregarObjetivo() {
+  const desde = $("obj-desde").value, hasta = $("obj-hasta").value;
+  if (!desde || !hasta || hasta < desde) return alert("Revisá las fechas del período.");
+  const o = { id: uid(), user_id: user.id, tipo: $("obj-tipo").value, desde, hasta };
+  db.objetivos.push(o);
+  db.objetivos.sort((a, b) => a.desde.localeCompare(b.desde));
+  encolar({ t: "ins", tabla: "objetivos", fila: o });
+}
+$("obj-agregar").onclick = agregarObjetivo;
+
+function borrarObjetivo(id) {
+  db.objetivos = db.objetivos.filter(o => o.id !== id);
+  encolar({ t: "del", tabla: "objetivos", id });
+}
+
+function resumenHTML(nec, t) {
+  const txt = (v, r) => v < r[0] ? "por debajo del rango" : v > r[1] ? "por encima del rango" : "dentro del rango";
+  const pk = Math.min(100, t.kcal / nec.kcal[1] * 100);
+  const pp = Math.min(100, t.prot / nec.prot[1] * 100);
+  return `
+    <div class="kpis">
+      <div class="kpi">
+        <small>Calorías</small>
+        <b>${Math.round(t.kcal)}<span>kcal</span></b>
+        <div class="mut">Rango ${Math.round(nec.kcal[0])}–${Math.round(nec.kcal[1])} · ${txt(t.kcal, nec.kcal)}</div>
+      </div>
+      <div class="kpi alt">
+        <small>Proteína</small>
+        <b>${Math.round(t.prot)}<span>g</span></b>
+        <div class="mut">Rango ${Math.round(nec.prot[0])}–${Math.round(nec.prot[1])} g · ${txt(t.prot, nec.prot)}</div>
+      </div>
+    </div>
+    <div class="mut">Objetivo actual: <b style="color:var(--txt)">${NOMBRE_OBJ[nec.obj]}</b> · Gasto estimado: ${Math.round(nec.gasto)} kcal/día</div>
+    <div class="barra"><div style="width:${pk}%"></div></div>
+    <div class="barra"><div style="width:${pp}%;background:linear-gradient(90deg,#ffb020,#ff5d7a)"></div></div>
+    ${nec.bajoPiso ? `<p style="color:var(--a3)">Tu referencia de calorías llegó al mínimo de seguridad (${Math.round(nec.piso)} kcal). Si necesitás menos, consultalo con un profesional.</p>` : ""}
+    <p class="mut">Estimaciones orientativas. Consultá con un nutricionista o médico antes de seguir un plan.</p>`;
+}
+
+function renderSemanaNutricion() {
+  const base = new Date(hoy()).getTime();
+  const dias = [];
+  for (let i = 6; i >= 0; i--) {
+    const f = new Date(base - i * 864e5).toISOString().slice(0, 10);
+    dias.push({ f: f.slice(5), kcal: Math.round(totalesDia(f).kcal) });
+  }
+  const nec = calcularNecesidades(hoy());
+  const sets = [{ label: "kcal", data: dias.map(d => d.kcal), backgroundColor: "rgba(34,211,166,.6)", borderRadius: 8 }];
+  if (nec) sets.push({ type: "line", label: "Referencia", data: dias.map(() => Math.round(nec.kcalRef)), borderColor: "#ffb020", borderDash: [6, 6], pointRadius: 0 });
+  dibujar("nu-semana", {
+    type: "bar",
+    data: { labels: dias.map(d => d.f), datasets: sets },
+    options: { plugins: { legend: { labels: { usePointStyle: true, boxWidth: 8 } } } }
+  });
+}
+
+function renderNutricion() {
+  if (db.perfil && !$("perf-edad").value) {
+    $("perf-sexo").value = db.perfil.sexo ?? "";
+    $("perf-edad").value = db.perfil.edad ?? "";
+    $("perf-altura").value = db.perfil.altura_cm ?? "";
+    $("perf-dias").value = String(db.perfil.dias_semana ?? 0);
+  }
+  const hoyStr = hoy();
+  const nec = calcularNecesidades(hoyStr);
+  $("nu-resumen").innerHTML = nec
+    ? resumenHTML(nec, totalesDia(hoyStr))
+    : '<p class="mut">Completá tu perfil y registrá tu peso para ver tus necesidades.</p>';
+
+  const delDia = db.comidas.filter(c => c.fecha === hoyStr);
+  $("nu-hoy").innerHTML = delDia.length ? delDia.map(c => {
+    const f = c.gramos / 100;
+    return `
+      <div class="row" style="border-top:1px solid var(--line);padding-top:10px">
+        <div style="flex:1 1 60%">
+          <b>${esc(c.nombre)}</b>
+          <div class="mut">${c.tipo} · ${c.gramos} g · ${Math.round(c.kcal100 * f)} kcal · ${fmt(c.prot100 * f, 0)} g prot.</div>
+        </div>
+        <button class="btn peligro mini fijo" onclick="borrarComida('${c.id}')">Borrar</button>
+      </div>`;
+  }).join("") : '<p class="mut">Todavía no registraste comidas hoy.</p>';
+
+  $("obj-lista").innerHTML = db.objetivos.length ? db.objetivos.map(o => `
+    <div class="row" style="border-top:1px solid var(--line);padding-top:10px">
+      <div style="flex:1 1 60%"><b>${NOMBRE_OBJ[o.tipo]}</b><div class="mut">${o.desde} → ${o.hasta}</div></div>
+      <button class="btn peligro mini fijo" onclick="borrarObjetivo('${o.id}')">Borrar</button>
+    </div>`).join("") : '<p class="mut">Todavía no cargaste períodos.</p>';
+
+  renderSemanaNutricion();
+}
+
 // ---------- Datos ----------
 $("d-exportar").onclick = () => {
   const blob = new Blob([JSON.stringify(db, null, 2)], { type: "application/json" });
@@ -845,11 +1232,11 @@ $("d-borrar").onclick = async () => {
   if (!navigator.onLine) return alert("Necesitás conexión para borrar todo.");
   if (!confirm("¿Borrar TODOS tus datos de la nube? No se puede deshacer.")) return;
   if (prompt('Para confirmar, escribí BORRAR') !== "BORRAR") return;
-  for (const t of ["series", "sesiones", "rutinas", "peso"]) {
+  for (const t of ["comidas", "objetivos", "perfil", "series", "sesiones", "rutinas", "peso"]) {
     const { error } = await sb.from(t).delete().eq("user_id", user.id);
     if (error) return alert("Error al borrar " + t + ": " + error.message);
   }
-  cola = []; db = { rutinas: [], sesiones: [], peso: [] }; sesionActualId = null;
+  cola = []; db = DB_VACIA(); sesionActualId = null;
   guardarTodo();
   renderTodo();
   alert("Datos borrados.");
@@ -862,6 +1249,7 @@ function renderTodo() {
   renderRutinas();
   if (!$("vista-progreso").classList.contains("hidden")) renderProgreso();
   if (!$("vista-peso").classList.contains("hidden")) renderPeso();
+  if (!$("vista-comida").classList.contains("hidden")) renderNutricion();
   pintarEstado();
 }
 
@@ -870,6 +1258,10 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
 
 $("s-fecha").value = hoy();
 $("pc-fecha").value = hoy();
+$("com-fecha").value = hoy();
+$("obj-desde").value = hoy();
+$("obj-hasta").value = sumarDias(hoy(), 90);
+$("com-tipo").innerHTML = TIPOS_COMIDA.map(t => `<option>${t}</option>`).join("");
 refrescarSelects();
 renderTodo();
 </script>
