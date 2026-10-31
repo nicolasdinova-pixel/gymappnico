@@ -139,6 +139,7 @@
     font-family: inherit; text-shadow: 0 0 6px rgba(0,240,255,.5); transition: all .2s;
   }
   .chip:hover, .chip:active { background: rgba(0,240,255,.2); box-shadow: 0 0 14px rgba(0,240,255,.5); transform: translateY(-1px); }
+  .chip.on { background: var(--cyan); color: #02131a; text-shadow: none; box-shadow: 0 0 14px rgba(0,240,255,.5); }
   .chip.salir { border-color: var(--mag); color: var(--mag); text-shadow: 0 0 6px rgba(255,43,214,.6); background: rgba(255,43,214,.06); }
 
   /* KPIs */
@@ -332,11 +333,30 @@
     </div>
 
     <div class="card">
+      <h2>Descanso <small id="rs-info">entre series</small></h2>
+      <div class="kpis">
+        <div class="kpi"><small>Cronómetro</small><b id="rs-cron">0:00</b></div>
+      </div>
+      <div class="row">
+        <button class="btn cy" id="rs-toggle">Iniciar</button>
+        <button class="btn sec fijo" id="rs-reset">Reiniciar</button>
+      </div>
+      <h2 style="margin-top:12px">Temporizador</h2>
+      <div class="row">
+        <input type="number" id="tm-seg" value="90" min="5" inputmode="numeric" placeholder="Segundos">
+        <button class="btn sec fijo" id="tm-iniciar">Iniciar</button>
+        <button class="btn peligro fijo" id="tm-cancelar">Cancelar</button>
+      </div>
+      <p class="mut" id="tm-estado">Elegí los segundos y tocá Iniciar. Suena y vibra al terminar.</p>
+    </div>
+
+    <div class="card">
       <h2>Sesión actual <small id="s-info"></small></h2>
       <table>
         <thead><tr><th>Ejercicio</th><th>Series</th><th>Reps</th><th>Kg</th><th>RPE</th><th></th></tr></thead>
         <tbody id="s-tabla"></tbody>
       </table>
+      <p class="mut" id="s-kcal"></p>
     </div>
 
     <div class="card">
@@ -351,9 +371,23 @@
       <h2>Nueva rutina</h2>
       <div class="grid" style="grid-template-columns:1fr">
         <input type="text" id="r-nombre" placeholder="Nombre (ej: Día 1 - Empuje)">
-        <input type="text" id="r-ejs" placeholder="Ejercicios separados por coma">
       </div>
+      <p class="mut">Tocá los ejercicios en el orden que los vas a hacer.</p>
+      <div id="r-picker"></div>
+      <p class="mut" id="r-elegidos"></p>
       <button class="btn" id="r-guardar">Guardar rutina</button>
+    </div>
+    <div class="card">
+      <h2>Nuevo ejercicio <small>se suma al catálogo</small></h2>
+      <div class="grid">
+        <input type="text" id="ej-nuevo-nombre" placeholder="Nombre" style="grid-column: 1 / -1">
+        <select id="ej-nuevo-grupo"></select>
+        <select id="ej-nuevo-tipo">
+          <option value="fuerza">Fuerza</option>
+          <option value="cardio">Cardio</option>
+        </select>
+      </div>
+      <button class="btn sec" id="ej-nuevo-guardar">Agregar ejercicio</button>
     </div>
     <div class="card">
       <h2>Rutinas guardadas</h2>
@@ -389,6 +423,29 @@
       </div>
       <div class="chartbox"><canvas id="p-chart"></canvas></div>
       <div class="kpis" id="p-stats"></div>
+    </div>
+
+    <div class="card">
+      <h2>Estadísticas <small>todo tu historial</small></h2>
+      <div class="kpis" id="st-kpis"></div>
+      <div class="chartbox"><canvas id="st-grupos-chart"></canvas></div>
+      <p class="mut" id="st-kcal-nota"></p>
+    </div>
+
+    <div class="card">
+      <h2>Ejercicios <small>1RM: primeras vs últimas sesiones</small></h2>
+      <div class="chips" id="ej-filtro">
+        <button class="chip on" data-f="mejoran">Mejoran</button>
+        <button class="chip" data-f="bajan">Bajan</button>
+        <button class="chip" data-f="todos">Todos</button>
+      </div>
+      <div id="ej-ranking"></div>
+    </div>
+
+    <div class="card">
+      <h2>Sobrecarga progresiva <small>según tus últimas sesiones</small></h2>
+      <button class="btn cy" id="so-analizar">Analizar mi progreso</button>
+      <div id="so-resultado" style="margin-top:14px"></div>
     </div>
   </section>
 
@@ -458,7 +515,7 @@ const K_CACHE = "gymapp_cache", K_COLA = "gymapp_cola", K_META = "gymapp_meta";
 const ONCONFLICT = { peso: "user_id,fecha" };
 
 // ---------- Estado ----------
-function DB_VACIA() { return { rutinas: [], sesiones: [], peso: [] }; }
+function DB_VACIA() { return { rutinas: [], sesiones: [], peso: [], ejercicios: [] }; }
 let user = null;
 let db = Object.assign(DB_VACIA(), leerJSON(K_CACHE, null));
 let cola = leerJSON(K_COLA, []);      // cambios pendientes de subir, en orden
@@ -585,16 +642,17 @@ async function sincronizar() {
 }
 
 async function descargar() {
-  const [r, s, p] = await Promise.all([
+  const [r, s, p, e] = await Promise.all([
     sb.from("rutinas").select("id,nombre,ejercicios,created_at").order("created_at"),
-    sb.from("sesiones").select("id,fecha,series(id,ejercicio,reps,kg,rpe,created_at)").order("fecha"),
-    sb.from("peso").select("fecha,kg").order("fecha")
+    sb.from("sesiones").select("id,fecha,series(id,ejercicio,reps,kg,rpe,descanso_seg,created_at)").order("fecha"),
+    sb.from("peso").select("fecha,kg").order("fecha"),
+    sb.from("ejercicios").select("id,user_id,nombre,grupo,tipo,met").order("nombre")
   ]);
-  for (const res of [r, s, p]) if (res.error) throw res.error;
+  for (const res of [r, s, p, e]) if (res.error) throw res.error;
   // Si mientras bajaba hubo cambios locales nuevos, no se pisan: se suben primero.
   if (cola.length) return;
   s.data.forEach(ses => ses.series.sort((a, b) => a.created_at.localeCompare(b.created_at)));
-  db = { rutinas: r.data, sesiones: s.data, peso: p.data };
+  db = { rutinas: r.data, sesiones: s.data, peso: p.data, ejercicios: e.data };
   guardarTodo();
   renderTodo();
 }
@@ -704,11 +762,72 @@ document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => {
   if (b.dataset.tab === "datos") renderAdmin();
 });
 
+// ---------- Descanso ----------
+// El último descanso medido se guarda en la próxima serie que agregues.
+let descansoPendiente = null;
+let rsInicio = null, rsId = null, tmId = null, tmFin = null, audioCtx = null;
+const fmtTiempo = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+
+$("rs-toggle").onclick = () => {
+  if (rsId) {
+    clearInterval(rsId); rsId = null;
+    descansoPendiente = Math.round((Date.now() - rsInicio) / 1000);
+    $("rs-toggle").textContent = "Iniciar";
+    $("rs-info").textContent = "último descanso: " + fmtTiempo(descansoPendiente);
+    toast("Descanso registrado · " + fmtTiempo(descansoPendiente));
+    return;
+  }
+  rsInicio = Date.now();
+  $("rs-toggle").textContent = "Detener";
+  rsId = setInterval(() => $("rs-cron").textContent = fmtTiempo(Math.floor((Date.now() - rsInicio) / 1000)), 250);
+};
+$("rs-reset").onclick = () => {
+  clearInterval(rsId); rsId = null; rsInicio = null; descansoPendiente = null;
+  $("rs-cron").textContent = "0:00";
+  $("rs-toggle").textContent = "Iniciar";
+  $("rs-info").textContent = "entre series";
+};
+
+function avisarFin() {
+  try { navigator.vibrate?.([300, 150, 300]); } catch (e) {}
+  try {
+    if (!audioCtx) return;
+    const o = audioCtx.createOscillator();
+    o.connect(audioCtx.destination); o.frequency.value = 880;
+    o.start(); o.stop(audioCtx.currentTime + 0.6);
+  } catch (e) {}
+}
+$("tm-iniciar").onclick = () => {
+  const seg = parseInt($("tm-seg").value);
+  if (!seg || seg < 1) return alert("Poné una cantidad de segundos.");
+  // Se crea el audio dentro del toque para que el celular lo permita después.
+  try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch (e) {}
+  clearInterval(tmId);
+  tmFin = Date.now() + seg * 1000;
+  const tick = () => {
+    const resta = Math.ceil((tmFin - Date.now()) / 1000);
+    if (resta <= 0) {
+      clearInterval(tmId); tmId = null;
+      $("tm-estado").textContent = "¡Terminó el descanso!";
+      avisarFin();
+      return;
+    }
+    $("tm-estado").textContent = "Quedan " + fmtTiempo(resta);
+  };
+  tick();
+  tmId = setInterval(tick, 250);
+};
+$("tm-cancelar").onclick = () => {
+  clearInterval(tmId); tmId = null;
+  $("tm-estado").textContent = "Temporizador cancelado.";
+};
+
 // ---------- Sesión ----------
 function ejerciciosConocidos() {
   const set = new Set();
   db.sesiones.forEach(s => s.series.forEach(x => set.add(x.ejercicio)));
   db.rutinas.forEach(r => r.ejercicios.forEach(e => set.add(e)));
+  (db.ejercicios || []).forEach(x => set.add(x.nombre));
   return [...set].sort();
 }
 
@@ -764,10 +883,14 @@ $("s-agregar").onclick = () => {
   const previo = mejorKgPrevio(ej, ses.id);
   const filas = [];
   for (let i = 0; i < n; i++) {
-    filas.push({ id: uid(), user_id: user.id, sesion_id: ses.id, ejercicio: ej, reps, kg, rpe, created_at: new Date().toISOString() });
+    filas.push({ id: uid(), user_id: user.id, sesion_id: ses.id, ejercicio: ej, reps, kg, rpe, descanso_seg: descansoPendiente, created_at: new Date().toISOString() });
   }
   ses.series.push(...filas);
   encolar({ t: "ins", tabla: "series", fila: filas.map(({ created_at, ...f }) => f) });
+  if (descansoPendiente !== null) {
+    descansoPendiente = null;
+    $("rs-info").textContent = "entre series";
+  }
   $("s-ej").value = "";
   if (kg > 0 && kg > previo) toast(`🔥 Nuevo récord en ${ej}: ${kg} kg`);
   else toast(`+${n} serie${n > 1 ? "s" : ""} · ${ej}`);
@@ -821,9 +944,32 @@ function borrarSesionConfirm(id) {
   if (confirm("¿Borrar esta sesión y todas sus series?")) quitarSesion(id);
 }
 
+// ---------- Calorías (estimación orientativa) ----------
+// Tiempo bajo carga por serie: 45 s de esfuerzo + el descanso registrado (o 90 s si no hay dato).
+// Calorías = MET × peso (kg) × horas. No reemplaza una medición.
+function pesoRef() { return db.peso.length ? db.peso[db.peso.length - 1].kg : null; }
+function estimarSesion(ses) {
+  const peso = pesoRef();
+  let seg = 0, kcal = 0;
+  ses.series.forEach(x => {
+    const s = 45 + (x.descanso_seg ?? 90);
+    seg += s;
+    if (peso) kcal += metDe(x.ejercicio) * peso * (s / 3600);
+  });
+  return { min: Math.round(seg / 60), kcal: Math.round(kcal), conPeso: !!peso };
+}
+
 function renderSesion() {
   const ses = sesionActual();
   $("s-info").textContent = ses ? ses.fecha : "sin sesión abierta";
+  if (ses && ses.series.length) {
+    const e = estimarSesion(ses);
+    $("s-kcal").textContent = e.conPeso
+      ? `Estimado: ~${e.kcal} kcal · ~${e.min} min (orientativo)`
+      : `Cargá tu peso para estimar calorías · ~${e.min} min`;
+  } else {
+    $("s-kcal").textContent = "";
+  }
   if (!ses) {
     $("s-tabla").innerHTML = `<tr><td colspan="6" class="mut">Agregá una serie para empezar.</td></tr>`;
   } else {
@@ -869,14 +1015,55 @@ function renderSesion() {
 }
 
 // ---------- Rutinas ----------
+// ---------- Catálogo de ejercicios ----------
+const GRUPOS = ["Pecho", "Espalda", "Hombros", "Piernas", "Glúteos", "Brazos", "Core", "Cardio", "Otro"];
+let rutinaBorrador = [];
+
+function catalogo() {
+  return (db.ejercicios || []).slice().sort((a, b) => a.grupo.localeCompare(b.grupo) || a.nombre.localeCompare(b.nombre));
+}
+function metDe(nombre) {
+  const x = (db.ejercicios || []).find(e => e.nombre === nombre);
+  return x ? Number(x.met) : 5;
+}
+function renderPicker() {
+  const grupos = {};
+  catalogo().forEach(e => (grupos[e.grupo] = grupos[e.grupo] || []).push(e.nombre));
+  $("r-picker").innerHTML = Object.entries(grupos).map(([g, nombres]) => `
+    <div style="margin-bottom:12px">
+      <div class="mut" style="font-weight:800;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">${esc(g)}</div>
+      <div class="chips">${nombres.map(n => `<button class="chip${rutinaBorrador.includes(n) ? " on" : ""}" data-pick="${esc(n)}">${esc(n)}</button>`).join("")}</div>
+    </div>`).join("") || '<p class="mut">Todavía no hay ejercicios en el catálogo.</p>';
+  $("r-elegidos").textContent = rutinaBorrador.length ? "Elegidos: " + rutinaBorrador.join(" · ") : "Ninguno elegido todavía.";
+}
+$("r-picker").onclick = e => {
+  const b = e.target.closest("button[data-pick]");
+  if (!b) return;
+  const n = b.dataset.pick;
+  rutinaBorrador = rutinaBorrador.includes(n) ? rutinaBorrador.filter(x => x !== n) : [...rutinaBorrador, n];
+  renderPicker();
+};
+$("ej-nuevo-guardar").onclick = () => {
+  const nombre = $("ej-nuevo-nombre").value.trim();
+  const grupo = $("ej-nuevo-grupo").value;
+  const tipo = $("ej-nuevo-tipo").value;
+  if (!nombre) return alert("Escribí el nombre del ejercicio.");
+  if (catalogo().some(e => e.nombre.toLowerCase() === nombre.toLowerCase())) return alert("Ya existe un ejercicio con ese nombre.");
+  const fila = { id: uid(), user_id: user.id, nombre, grupo, tipo, met: tipo === "cardio" ? 7 : 5 };
+  db.ejercicios.push(fila);
+  encolar({ t: "ins", tabla: "ejercicios", fila });
+  $("ej-nuevo-nombre").value = "";
+  toast("Ejercicio agregado · " + nombre);
+};
+
+// ---------- Rutinas ----------
 $("r-guardar").onclick = () => {
   const nombre = $("r-nombre").value.trim();
-  const ejercicios = $("r-ejs").value.split(",").map(s => s.trim()).filter(Boolean);
-  if (!nombre || !ejercicios.length) return alert("Poné nombre y al menos un ejercicio.");
-  const r = { id: uid(), nombre, ejercicios };
+  if (!nombre || !rutinaBorrador.length) return alert("Poné nombre y elegí al menos un ejercicio.");
+  const r = { id: uid(), nombre, ejercicios: [...rutinaBorrador] };
   db.rutinas.push(r);
-  encolar({ t: "ins", tabla: "rutinas", fila: { id: r.id, user_id: user.id, nombre, ejercicios } });
-  $("r-nombre").value = ""; $("r-ejs").value = "";
+  encolar({ t: "ins", tabla: "rutinas", fila: { id: r.id, user_id: user.id, nombre, ejercicios: r.ejercicios } });
+  $("r-nombre").value = ""; rutinaBorrador = []; renderPicker();
   toast("Rutina guardada");
 };
 
@@ -1087,10 +1274,171 @@ function renderProgresoEjercicio() {
   }
 }
 
+// ---------- Estadísticas, ranking y sobrecarga ----------
+const DIA_MS = 864e5;
+const sesionesConSeries = () => db.sesiones.filter(s => s.series.length);
+const grupoDe = nombre => { const x = (db.ejercicios || []).find(e => e.nombre === nombre); return x ? x.grupo : "Otro"; };
+const promedio = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+const mmss = s => s === null ? "—" : fmtTiempo(Math.round(s));
+function e1rmSesion(ses, ej) {
+  const xs = ses.series.filter(x => x.ejercicio === ej);
+  return xs.length ? Math.max(...xs.map(x => e1rm(x.kg, x.reps))) : null;
+}
+function ejerciciosEnSesiones() {
+  const set = new Set();
+  sesionesConSeries().forEach(s => s.series.forEach(x => set.add(x.ejercicio)));
+  return [...set];
+}
+
+function renderEstadisticas() {
+  const ses = sesionesConSeries();
+  const todas = ses.flatMap(s => s.series);
+  const corte30 = new Date(hoy()).getTime() - 30 * DIA_MS;
+  const ses30 = ses.filter(s => new Date(s.fecha).getTime() >= corte30);
+  const series30 = ses30.flatMap(s => s.series);
+  const tonelaje = todas.reduce((a, x) => a + x.kg * x.reps, 0);
+  const descs = todas.filter(x => x.descanso_seg != null).map(x => x.descanso_seg);
+  const kcal30 = ses30.reduce((a, s) => a + estimarSesion(s).kcal, 0);
+  const conPeso = !!pesoRef();
+
+  let mejor = null, records = 0;
+  ejerciciosEnSesiones().forEach(ej => {
+    const todasE = ses.map(s => e1rmSesion(s, ej) ?? 0);
+    const m = Math.max(...todasE);
+    if (!mejor || m > mejor.v) mejor = { ej, v: m };
+    const antes = ses.filter(s => new Date(s.fecha).getTime() < corte30).map(s => e1rmSesion(s, ej) ?? 0);
+    const mejorAntes = antes.length ? Math.max(...antes) : 0;
+    const ult = ses30.map(s => e1rmSesion(s, ej) ?? 0);
+    if (mejorAntes > 0 && ult.length && Math.max(...ult) > mejorAntes) records++;
+  });
+
+  $("st-kpis").innerHTML = `
+    <div class="kpi"><small>Sesiones</small><b>${ses.length}</b></div>
+    <div class="kpi c2"><small>Series totales</small><b>${todas.length}</b></div>
+    <div class="kpi c3"><small>Tonelaje total</small><b>${Math.round(tonelaje).toLocaleString("es-AR")}<span>kg</span></b></div>
+    <div class="kpi c4"><small>Frecuencia</small><b>${fmt(ses30.length / 4)}<span>ses/sem</span></b></div>
+    <div class="kpi"><small>Descanso promedio</small><b>${mmss(promedio(descs))}</b></div>
+    <div class="kpi c2"><small>Récords (30 días)</small><b>${records}</b></div>
+    <div class="kpi c3"><small>Mejor 1RM</small><b>${mejor ? fmt(mejor.v, 0) : "—"}<span>${mejor ? "kg · " + esc(mejor.ej) : ""}</span></b></div>
+    <div class="kpi c4"><small>Kcal (30 días)</small><b>${conPeso ? kcal30.toLocaleString("es-AR") : "—"}<span>${conPeso ? "kcal" : "cargá peso"}</span></b></div>`;
+
+  const grupos = {};
+  series30.forEach(x => { const g = grupoDe(x.ejercicio); grupos[g] = (grupos[g] || 0) + x.kg * x.reps; });
+  const labels = Object.keys(grupos);
+  const colores = [NEON.cyan, NEON.mag, NEON.lime, NEON.sun, NEON.vio, NEON.red];
+  dibujar("st-grupos-chart", {
+    type: "bar",
+    data: { labels, datasets: [{ label: "Volumen 30 días (kg)", data: labels.map(l => Math.round(grupos[l])),
+      backgroundColor: labels.map((_, i) => colores[i % colores.length] + "cc"), borderRadius: 10, borderWidth: 0 }] },
+    options: { plugins: { legend: { display: false } } }
+  });
+  $("st-kcal-nota").textContent = conPeso
+    ? "Calorías: estimación orientativa (MET × peso × tiempo bajo carga). No reemplaza una medición."
+    : "Cargá tu peso para estimar calorías.";
+}
+
+// Compara el 1RM promedio de las primeras sesiones con el de las últimas.
+function rankingEjercicios() {
+  return ejerciciosEnSesiones().map(ej => {
+    const ses = sesionesConSeries().filter(s => s.series.some(x => x.ejercicio === ej));
+    if (ses.length < 2) return null;
+    const vals = ses.map(s => e1rmSesion(s, ej));
+    const k = Math.min(3, Math.floor(ses.length / 2));
+    const ini = promedio(vals.slice(0, k)), fin = promedio(vals.slice(-k));
+    const pct = ini ? (fin - ini) / ini * 100 : 0;
+    return { ej, pct, n: ses.length, mejor: Math.max(...vals) };
+  }).filter(Boolean);
+}
+
+let filtroEj = "mejoran";
+function renderRanking() {
+  const r = rankingEjercicios();
+  const lista = filtroEj === "mejoran" ? r.filter(x => x.pct > 0).sort((a, b) => b.pct - a.pct)
+    : filtroEj === "bajan" ? r.filter(x => x.pct < 0).sort((a, b) => a.pct - b.pct)
+    : r.sort((a, b) => b.pct - a.pct);
+  $("ej-ranking").innerHTML = lista.length ? lista.map(x => `
+    <div class="row filas" data-ver="${esc(x.ej)}" style="cursor:pointer">
+      <div style="flex:1 1 60%"><b>${esc(x.ej)}</b><div class="mut">${x.n} sesiones · mejor 1RM ${fmt(x.mejor)} kg</div></div>
+      <b class="${x.pct > 0 ? "pos" : x.pct < 0 ? "neg" : ""}">${x.pct > 0 ? "+" : ""}${fmt(x.pct)}%</b>
+    </div>`).join("") : '<p class="mut">Sin ejercicios para mostrar. Necesitás al menos 2 sesiones por ejercicio.</p>';
+}
+$("ej-filtro").onclick = e => {
+  const b = e.target.closest("button[data-f]");
+  if (!b) return;
+  filtroEj = b.dataset.f;
+  document.querySelectorAll("#ej-filtro .chip").forEach(c => c.classList.toggle("on", c === b));
+  renderRanking();
+};
+$("ej-ranking").onclick = e => {
+  const fila = e.target.closest("[data-ver]");
+  if (!fila) return;
+  $("p-ej").value = fila.dataset.ver;
+  renderProgreso();
+  $("p-chart").scrollIntoView({ behavior: "smooth", block: "center" });
+};
+
+// Reglas de sobrecarga progresiva sobre la última sesión de cada ejercicio.
+function recomendaciones() {
+  const ses = sesionesConSeries();
+  const out = [];
+  ejerciciosEnSesiones().forEach(ej => {
+    const hist = ses.filter(s => s.series.some(x => x.ejercicio === ej));
+    if (!hist.length) return;
+    const ult = hist[hist.length - 1];
+    const xs = ult.series.filter(x => x.ejercicio === ej);
+    const kgMax = Math.max(...xs.map(x => x.kg));
+    const repsMin = Math.min(...xs.map(x => x.reps));
+    const rpeProm = promedio(xs.map(x => x.rpe).filter(v => v != null));
+    const descProm = promedio(xs.map(x => x.descanso_seg).filter(v => v != null));
+    const e1Ult = e1rmSesion(ult, ej);
+    const ePrev = hist.length > 1 ? e1rmSesion(hist[hist.length - 2], ej) : null;
+    const tres = hist.slice(-3).map(s => e1rmSesion(s, ej));
+    const estancado = tres.length === 3 && Math.max(...tres) - Math.min(...tres) <= Math.max(...tres) * 0.01;
+
+    let tipo, consejo;
+    if (ePrev && e1Ult < ePrev * 0.97) {
+      tipo = "baja";
+      consejo = "Bajó tu 1RM estimado. Revisá descanso, sueño y carga; si se repite la próxima sesión, bajá un 5-10 % y volvé a construir.";
+    } else if (estancado) {
+      tipo = "estancado";
+      consejo = "Llevás 3 sesiones sin subir. Cambiá el rango de repeticiones (por ejemplo de 5 a 8) o sumá una serie.";
+    } else if ((rpeProm !== null && rpeProm >= 9) || repsMin < 5) {
+      tipo = "mantener";
+      consejo = "Esta carga te exige al límite. Mantenela y buscá una repetición más antes de subir.";
+    } else if ((rpeProm !== null && rpeProm <= 7.5 && repsMin >= 8) || (rpeProm === null && repsMin >= 10)) {
+      tipo = "sube";
+      consejo = kgMax > 0
+        ? `Subí a ${fmt(kgMax + 2.5)} kg la próxima vez.`
+        : "Sumá peso o una serie: con peso corporal la sobrecarga viene por repeticiones.";
+    } else {
+      tipo = "reps";
+      consejo = "Sumá una repetición por serie hasta llegar al rango alto y recién después subí la carga.";
+    }
+    if (descProm !== null && repsMin < 6 && descProm < 120) consejo += " Para cargas altas conviene descansar 2 a 3 minutos.";
+    out.push({ ej, tipo, consejo });
+  });
+  return out;
+}
+
+$("so-analizar").onclick = () => {
+  const orden = { baja: 0, estancado: 1, mantener: 2, reps: 3, sube: 4 };
+  const etiqueta = { baja: "Bajó", estancado: "Estancado", mantener: "Al límite", reps: "Sumá reps", sube: "Subí carga" };
+  const color = { baja: "neg", estancado: "", mantener: "", reps: "", sube: "pos" };
+  const r = recomendaciones().sort((a, b) => orden[a.tipo] - orden[b.tipo]);
+  $("so-resultado").innerHTML = r.length ? `
+    <p class="mut">Sobrecarga progresiva: subir de a poco la carga, las repeticiones o las series. Orientativo; no reemplaza a tu profesor.</p>
+    ${r.map(x => `
+      <div class="row filas">
+        <div style="flex:1 1 70%"><b style="color:var(--sun)">${esc(x.ej)}</b> <span class="${color[x.tipo]}">${etiqueta[x.tipo]}</span><div class="mut">${esc(x.consejo)}</div></div>
+      </div>`).join("")}` : '<p class="mut">Necesitás al menos 2 sesiones con el mismo ejercicio para dar recomendaciones.</p>';
+};
+
 function renderProgreso() {
   renderProgresoPeso();
   renderEntrenamiento();
   renderProgresoEjercicio();
+  renderEstadisticas();
+  renderRanking();
 }
 $("p-ej").onchange = renderProgreso;
 $("p-metrica").onchange = renderProgreso;
@@ -1137,7 +1485,7 @@ $("d-borrar").onclick = async () => {
   if (!navigator.onLine) return alert("Necesitás conexión para borrar todo.");
   if (!confirm("¿Borrar TODOS tus datos de la nube? No se puede deshacer.")) return;
   if (prompt('Para confirmar, escribí BORRAR') !== "BORRAR") return;
-  for (const t of ["series", "sesiones", "rutinas", "peso"]) {
+  for (const t of ["series", "sesiones", "rutinas", "peso", "ejercicios"]) {
     const { error } = await sb.from(t).delete().eq("user_id", user.id);
     if (error) return alert("Error al borrar " + t + ": " + error.message);
   }
@@ -1151,6 +1499,7 @@ $("d-borrar").onclick = async () => {
 function renderTodo() {
   refrescarSelects();
   renderSesion();
+  renderPicker();
   renderRutinas();
   if (!$("vista-progreso").classList.contains("hidden")) renderProgreso();
   if (!$("vista-peso").classList.contains("hidden")) renderPeso();
@@ -1162,6 +1511,7 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
 
 $("s-fecha").value = hoy();
 $("pc-fecha").value = hoy();
+$("ej-nuevo-grupo").innerHTML = GRUPOS.map(g => `<option>${g}</option>`).join("");
 refrescarSelects();
 renderTodo();
 </script>
